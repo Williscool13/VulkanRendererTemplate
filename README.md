@@ -2,7 +2,7 @@
 
 This repository contains a collection of templates for Vulkan applications.
 
-The templates are designed to be as simple as possible, while still providing a good starting point for a Vulkan application. The templates are written in C++.
+The templates are designed to be relatively simple, while still providing a good starting point for a Vulkan application. The templates are written in C++.
 
 # 1 Requirements
 
