@@ -48,6 +48,8 @@ void MainEngine::init() {
 	init_dearimgui();
 
 	init_pipeline();
+
+	_cubemapImage = _errorCheckerboardImage;
 	
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -120,7 +122,7 @@ void MainEngine::draw()
 	VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
 
 	vkutil::transition_image(cmd, _drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	draw_fullscreen(cmd, _errorCheckerboardImage, _drawImage);
+	draw_fullscreen(cmd, _cubemapImage, _drawImage);
 
 	vkutil::transition_image(cmd, _drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 	vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -401,7 +403,6 @@ void MainEngine::init_dearimgui()
 	ImGui_ImplVulkan_CreateFontsTexture();
 }
 
-std::string _equirectangularPath;
 void MainEngine::layout_imgui()
 {
 	// imgui new frame
@@ -410,6 +411,21 @@ void MainEngine::layout_imgui()
 	ImGui::NewFrame();
 
 	if (ImGui::Begin("Main")) {
+		ImGui::InputText("Path to Equirecangular Image", &_equirectangularPath);
+		if (ImGui::Button("Load Equirectangular Image")) {
+			int width, height, channels;
+			float* data = stbi_loadf(_equirectangularPath.c_str(), &width, &height, &channels, 4);
+			if (data) {
+				fmt::print("Loaded Equirectangular Image \"{}\": {}x{}x{}\n", _equirectangularPath, width, height, channels);
+				if (_cubemapImage.image != _errorCheckerboardImage.image) destroy_image(_cubemapImage);
+				_cubemapImage = create_image(data, width * height * 4 * sizeof(float), VkExtent3D{ (uint32_t)width, (uint32_t)height, 1 }, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+				stbi_image_free(data);
+			}
+			else {
+				fmt::print("Failed to load Equirectangular Image\n");
+			}
+		}
+
 		ImGui::Text("Frame Time: %.2f ms", frameTime);
 		ImGui::Text("Draw Time: %.2f ms", drawTime);
 	}
@@ -674,6 +690,8 @@ void MainEngine::cleanup() {
 
 
 	_mainDeletionQueue.flush();
+
+	destroy_image(_cubemapImage);
 
 	ImGui_ImplVulkan_Shutdown();
 	vkDestroyDescriptorPool(_device, imguiPool, nullptr);
