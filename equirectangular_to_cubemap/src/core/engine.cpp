@@ -16,11 +16,14 @@
 #endif
 
 #define ENABLE_FRAME_STATISTICS true
-#define USE_MSAA true
+#define USE_MSAA false
 #define MSAA_SAMPLES VK_SAMPLE_COUNT_4_BIT
 
 void MainEngine::init() {
-	// Init Window
+	fmt::print("================================================================================\n");
+	fmt::print("Initializing Program\n");
+	auto start = std::chrono::system_clock::now();
+
 	{
 		// We initialize SDL and create a window with it.
 		SDL_Init(SDL_INIT_VIDEO);
@@ -38,23 +41,108 @@ void MainEngine::init() {
 	init_vulkan();
 	init_swapchain();
 	init_commands();
-	//init_sync_structures();
+	init_sync_structures();
 
-	fmt::print("Finished Initialization\n");
+	init_dearimgui();
+
+
+	
+	auto end = std::chrono::system_clock::now();
+	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+	fmt::print("Finished Initialization in {} seconds\n", elapsed.count() / 1000000.0f);
+	fmt::print("================================================================================\n");
 }
 
 void MainEngine::run() {
 	SDL_Event e;
 	bool bQuit = false;
+	bool stop_rendering = false;
 	SDL_SetRelativeMouseMode(SDL_FALSE);
 
 	while (!bQuit) {
 		while (SDL_PollEvent(&e)) {
-			if (e.type == SDL_QUIT) {
-				bQuit = true;
+			if (e.type == SDL_QUIT) { bQuit = true; continue; }
+			if (e.type == SDL_WINDOWEVENT) {
+				if (e.window.event == SDL_WINDOWEVENT_MINIMIZED) {
+					stop_rendering = true;
+				}
+				if (e.window.event == SDL_WINDOWEVENT_RESTORED) {
+					stop_rendering = false;
+				}
 			}
+
+			ImGui_ImplSDL2_ProcessEvent(&e);
 		}
+
+		if (stop_rendering) {
+			// throttle the speed to avoid the endless spinning
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			continue;
+		}
+
+		layout_imgui();
+
+		// actual rendering
+		draw();
 	}
+}
+
+
+void MainEngine::draw()
+{
+	// GPU -> CPU sync (fence)
+	VK_CHECK(vkWaitForFences(_device, 1, &get_current_frame()._renderFence, true, 1000000000));
+	get_current_frame()._deletionQueue.flush();
+	VK_CHECK(vkResetFences(_device, 1, &get_current_frame()._renderFence));
+
+	// GPU -> GPU sync (semaphore)
+	uint32_t swapchainImageIndex;
+	VkResult e = vkAcquireNextImageKHR(_device, _swapchain, 1000000000, get_current_frame()._swapchainSemaphore, nullptr, &swapchainImageIndex);
+	//if (e == VK_ERROR_OUT_OF_DATE_KHR) { resize_requested = true; fmt::print("Swapchain out of date, resize requested\n"); return; }
+
+	VkCommandBuffer cmd = get_current_frame()._mainCommandBuffer;
+	VK_CHECK(vkResetCommandBuffer(cmd, 0));
+	VkCommandBufferBeginInfo cmdBeginInfo = vkinit::command_buffer_begin_info(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT); // only submit once
+
+	_drawExtent.height = static_cast<uint32_t>(std::min(_swapchainExtent.height, _drawImage.imageExtent.height) * _renderScale);
+	_drawExtent.width = static_cast<uint32_t>(std::min(_swapchainExtent.width, _drawImage.imageExtent.width) * _renderScale);
+
+	VkClearColorValue clearColor = { 0.1f, 0.1f, 0.1f, 1.0f };
+	VkImageSubresourceRange subresourceRange = vkinit::image_subresource_range(VK_IMAGE_ASPECT_COLOR_BIT);
+
+	VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
+	vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	vkCmdClearColorImage(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &subresourceRange);
+	vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	draw_imgui(cmd, _swapchainImageViews[swapchainImageIndex]);
+	vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
+	VK_CHECK(vkEndCommandBuffer(cmd));
+
+	// Submission
+	VkCommandBufferSubmitInfo cmdinfo = vkinit::command_buffer_submit_info(cmd);
+	VkSemaphoreSubmitInfo waitInfo = vkinit::semaphore_submit_info(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR, get_current_frame()._swapchainSemaphore);
+	VkSemaphoreSubmitInfo signalInfo = vkinit::semaphore_submit_info(VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR, get_current_frame()._renderSemaphore);
+	VkSubmitInfo2 submit = vkinit::submit_info(&cmdinfo, &signalInfo, &waitInfo);
+	VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submit, get_current_frame()._renderFence)); // when cmd is no longer used, fence is signaled and next command can be recorded/queued
+	// Present
+	VkPresentInfoKHR presentInfo = {};
+	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	presentInfo.pNext = nullptr;
+	presentInfo.pSwapchains = &_swapchain;
+	presentInfo.swapchainCount = 1;
+	presentInfo.pWaitSemaphores = &get_current_frame()._renderSemaphore;
+	presentInfo.waitSemaphoreCount = 1;
+	presentInfo.pImageIndices = &swapchainImageIndex;
+	VkResult presentResult = vkQueuePresentKHR(_graphicsQueue, &presentInfo);
+
+	/*if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
+		resize_requested = true;
+		fmt::print("present failed - out of date, resize requested\n");
+	}*/
+
+	//increase the number of frames drawn
+	_frameNumber++;
 }
 
 
@@ -196,6 +284,78 @@ void MainEngine::init_sync_structures()
 	VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_immFence));
 }
 
+void MainEngine::init_dearimgui()
+{
+	// DYNAMIC RENDERING (NOT RENDER PASS)
+	VkDescriptorPoolSize pool_sizes[] =
+	{
+		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 },
+	};
+	VkDescriptorPoolCreateInfo pool_info = {};
+	pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+	pool_info.maxSets = 1;
+	pool_info.poolSizeCount = (uint32_t)std::size(pool_sizes);
+	pool_info.pPoolSizes = pool_sizes;
+
+	//VkDescriptorPool imguiPool;
+	VK_CHECK(vkCreateDescriptorPool(_device, &pool_info, nullptr, &imguiPool));
+
+	// Setup Dear ImGui context
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO();
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+	ImGui::StyleColorsLight();
+
+	// Setup Platform/Renderer backends
+	ImGui_ImplSDL2_InitForVulkan(_window);
+	ImGui_ImplVulkan_InitInfo init_info = {};
+	init_info.Instance = _instance;
+	init_info.PhysicalDevice = _physicalDevice;
+	init_info.Device = _device;
+	init_info.QueueFamily = _graphicsQueueFamily;
+	init_info.Queue = _graphicsQueue;
+	init_info.DescriptorPool = imguiPool;
+	init_info.Subpass = 0;
+	init_info.MinImageCount = 3;
+	init_info.ImageCount = 3;
+	init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
+	//dynamic rendering parameters for imgui to use
+	init_info.UseDynamicRendering = true;
+	init_info.PipelineRenderingCreateInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
+	init_info.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+	init_info.PipelineRenderingCreateInfo.pColorAttachmentFormats = &_swapchainImageFormat;
+
+
+	ImGui_ImplVulkan_Init(&init_info);
+	ImGui_ImplVulkan_CreateFontsTexture();
+}
+
+void MainEngine::layout_imgui()
+{
+	// imgui new frame
+	ImGui_ImplVulkan_NewFrame();
+	ImGui_ImplSDL2_NewFrame();
+	ImGui::NewFrame();
+	bool show_demo_window = true;
+	ImGui::ShowDemoWindow(&show_demo_window);
+	ImGui::Render();
+
+}
+
+void MainEngine::draw_imgui(VkCommandBuffer cmd, VkImageView targetImageView)
+{
+	VkRenderingAttachmentInfo colorAttachment = vkinit::attachment_info(targetImageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	VkRenderingInfo renderInfo = vkinit::rendering_info(_swapchainExtent, &colorAttachment, nullptr);
+	vkCmdBeginRendering(cmd, &renderInfo);
+	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
+	vkCmdEndRendering(cmd);
+}
+
 void MainEngine::create_draw_images(uint32_t width, uint32_t height) {
 	// Draw Image
 	{
@@ -311,6 +471,8 @@ void MainEngine::destroy_draw_iamges() {
 void MainEngine::cleanup() {
 	fmt::print("================================================================================\n");
 	fmt::print("Cleaning up\n");
+	auto start = std::chrono::system_clock::now();
+
 	SDL_SetRelativeMouseMode(SDL_FALSE);
 
 	vkDeviceWaitIdle(_device);
@@ -323,6 +485,9 @@ void MainEngine::cleanup() {
 
 
 	_mainDeletionQueue.flush();
+
+	ImGui_ImplVulkan_Shutdown();
+	vkDestroyDescriptorPool(_device, imguiPool, nullptr);
 
 
 	for (int i = 0; i < FRAME_OVERLAP; i++) {
@@ -349,7 +514,9 @@ void MainEngine::cleanup() {
 	vkDestroyInstance(_instance, nullptr);
 
 	SDL_DestroyWindow(_window);
-	fmt::print("Cleanup done\n");
+	auto end = std::chrono::system_clock::now();
+	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+	fmt::print("Cleanup done in {} seconds\n", elapsed.count() / 1000000.0f);
 	fmt::print("================================================================================\n");
 }
 

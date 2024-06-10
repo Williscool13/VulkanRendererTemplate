@@ -2,7 +2,7 @@
 #include "big_header.h"
 
 #include "vk_initializers.h"
-
+#include "vk_images.h"
 constexpr unsigned int FRAME_OVERLAP = 2;
 
 
@@ -93,9 +93,14 @@ public:
 	VkCommandPool _immCommandPool;
 	void immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function);
 
+	// Dear ImGui
+	VkDescriptorPool imguiPool;
+
 	void init();
 	void run();
 	void cleanup();
+
+	void draw();
 
 private:
 	void init_vulkan();
@@ -104,6 +109,8 @@ private:
 	void init_sync_structures();
 
 	void init_dearimgui();
+	void layout_imgui();
+	void draw_imgui(VkCommandBuffer cmd, VkImageView targetImageView);
 
 
 	void create_swapchain(uint32_t width, uint32_t height);
