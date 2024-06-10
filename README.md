@@ -12,7 +12,7 @@ Visual Studio 2022 or later.
 
 # 2 Getting Started
 
-There is currently only 1 template. This template is on the main branch and uses the following features/extensions:
+This template is on the main branch and uses the following features/extensions:
 
 	- Dynamic Rendering
 	- Synchronization 2
@@ -23,8 +23,7 @@ There is currently only 1 template. This template is on the main branch and uses
 
 # This Branch
 
-This branch is an example of how to use the template to create a simple Vulkan application. 
-This application is used to convert a 2D equirectangular image to a cubemap, with ability to preview what the cubemap looks like.
+This is a branch of the main repository that contains a simple Vulkan application that converts a 2D equirectangular image to a cubemap.
 
 # TODO
 
