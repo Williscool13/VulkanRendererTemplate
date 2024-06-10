@@ -1,0 +1,93 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Source Files\fastgltf">
+      <UniqueIdentifier>{d5771f95-eb44-42a9-bb78-1a6d58017fc6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\simdjson">
+      <UniqueIdentifier>{98da0167-7d60-4b60-8239-27188f107f1d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\vkbootstrap">
+      <UniqueIdentifier>{f9565c45-abd5-4134-8f42-e03a523917b2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\imgui">
+      <UniqueIdentifier>{89c052e6-af7f-493e-8081-91ff11406612}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\volk">
+      <UniqueIdentifier>{feb25891-4d0e-4641-b446-669b7b66c403}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="engine.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vk_initializers.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui_draw.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui_tables.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui_widgets.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui_demo.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\backends\imgui_impl_vulkan.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\backends\imgui_impl_sdl2.cpp">
+      <Filter>Source Files\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\fastgltf\base64.cpp">
+      <Filter>Source Files\fastgltf</Filter>
+    </ClCompile>
+    <ClCompile Include="src\fastgltf\fastgltf.cpp">
+      <Filter>Source Files\fastgltf</Filter>
+    </ClCompile>
+    <ClCompile Include="src\fastgltf\fastgltf.ixx">
+      <Filter>Source Files\fastgltf</Filter>
+    </ClCompile>
+    <ClCompile Include="src\fastgltf\io.cpp">
+      <Filter>Source Files\fastgltf</Filter>
+    </ClCompile>
+    <ClCompile Include="include\volk\volk.c">
+      <Filter>Source Files\volk</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vkbootstrap\VkBootstrap.cpp">
+      <Filter>Source Files\vkbootstrap</Filter>
+    </ClCompile>
+    <ClCompile Include="src\simdjson\simdjson.cpp">
+      <Filter>Source Files\simdjson</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="include\engine.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\vk_initializers.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
