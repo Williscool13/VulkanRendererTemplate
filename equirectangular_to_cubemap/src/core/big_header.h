@@ -45,3 +45,15 @@
 #include <imgui/imgui.h>
 #include <imgui/backends/imgui_impl_sdl2.h>
 #include <imgui/backends/imgui_impl_vulkan.h>
+#include <imgui/misc/cpp/imgui_stdlib.h>
+
+
+
+#define VK_CHECK(x)                                                     \
+    do {                                                                \
+        VkResult err = x;                                               \
+        if (err) {                                                      \
+            fmt::print("Detected Vulkan error: {}\n", string_VkResult(err)); \
+            abort();                                                    \
+        }                                                               \
+    } while (0)

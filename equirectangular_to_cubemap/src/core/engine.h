@@ -1,8 +1,13 @@
 #pragma once
 #include "big_header.h"
+#include "vk_types.h"
 
 #include "vk_initializers.h"
 #include "vk_images.h"
+#include "vk_descriptors.h"
+#include "vk_descriptor_buffer.h"
+#include "vk_pipelines.h"
+
 constexpr unsigned int FRAME_OVERLAP = 2;
 
 
@@ -35,20 +40,6 @@ struct FrameData {
 };
 
 
-struct AllocatedImage {
-	VkImage image;
-	VkImageView imageView;
-	VmaAllocation allocation;
-	VkExtent3D imageExtent;
-	VkFormat imageFormat;
-};
-
-struct AllocatedBuffer {
-	VkBuffer buffer;
-	VmaAllocation allocation;
-	VmaAllocationInfo info;
-};
-
 class MainEngine {
 public:
 	VkInstance _instance;
@@ -63,6 +54,8 @@ public:
 
 
 	int _frameNumber{ 0 };
+	float frameTime{ 0.0f };
+	float drawTime{ 0.0f };
 
 	// Graphics Queue Family
 	FrameData _frames[FRAME_OVERLAP];
@@ -96,6 +89,35 @@ public:
 	// Dear ImGui
 	VkDescriptorPool imguiPool;
 
+	// Default textures/samplers
+	AllocatedImage _whiteImage;
+	AllocatedImage _blackImage;
+	AllocatedImage _greyImage;
+	AllocatedImage _errorCheckerboardImage;
+	VkSampler _defaultSamplerLinear;
+	VkSampler _defaultSamplerNearest;
+
+#pragma region Images
+	AllocatedImage create_image(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+	AllocatedImage create_image(void* data, size_t dataSize, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+	int get_channel_count(VkFormat format);
+	void destroy_image(const AllocatedImage& img);
+#pragma endregion
+
+#pragma region VkBuffers
+	AllocatedBuffer create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+	AllocatedBuffer create_staging_buffer(size_t allocSize);
+	void copy_buffer(AllocatedBuffer src, AllocatedBuffer dst, VkDeviceSize size);
+	VkDeviceAddress get_buffer_address(AllocatedBuffer buffer);
+	void destroy_buffer(const AllocatedBuffer& buffer);
+#pragma endregion
+
+
+	VkPipelineLayout _fullscreenPipelineLayout;
+	VkDescriptorSetLayout _fullscreenDescriptorSetLayout;
+	DescriptorBufferSampler _fullscreenDescriptorBuffer;
+	ShaderObject _fullscreenPipeline;
+
 	void init();
 	void run();
 	void cleanup();
@@ -107,10 +129,15 @@ private:
 	void init_swapchain();
 	void init_commands();
 	void init_sync_structures();
+	void init_default_data();
 
 	void init_dearimgui();
 	void layout_imgui();
 	void draw_imgui(VkCommandBuffer cmd, VkImageView targetImageView);
+
+	void draw_fullscreen(VkCommandBuffer cmd, AllocatedImage sourceImage, AllocatedImage targetImage);
+
+	void init_pipeline();
 
 
 	void create_swapchain(uint32_t width, uint32_t height);
@@ -119,13 +146,3 @@ private:
 	void destroy_draw_iamges();
 };
 
-
-
-#define VK_CHECK(x)                                                     \
-    do {                                                                \
-        VkResult err = x;                                               \
-        if (err) {                                                      \
-            fmt::print("Detected Vulkan error: {}\n", string_VkResult(err)); \
-            abort();                                                    \
-        }                                                               \
-    } while (0)
