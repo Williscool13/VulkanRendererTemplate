@@ -42,7 +42,7 @@ void MainEngine::init() {
 	init_swapchain();
 	init_commands();
 	init_sync_structures();
-	
+
 	init_default_data();
 
 	init_dearimgui();
@@ -50,7 +50,7 @@ void MainEngine::init() {
 	init_pipeline();
 
 	_cubemapImage = _errorCheckerboardImage;
-	
+
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 	fmt::print("Finished Initialization in {} seconds\n", elapsed.count() / 1000000.0f);
@@ -130,12 +130,12 @@ void MainEngine::draw()
 
 	//vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 	//vkCmdClearColorImage(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &subresourceRange);
-	vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL); 
+	vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	draw_imgui(cmd, _swapchainImageViews[swapchainImageIndex]);
 	vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
 	VK_CHECK(vkEndCommandBuffer(cmd));
-	
+
 	auto end2 = std::chrono::system_clock::now();
 	auto elapsed2 = std::chrono::duration_cast<std::chrono::microseconds>(end2 - start2);
 
@@ -215,7 +215,7 @@ void MainEngine::draw_fullscreen(VkCommandBuffer cmd, AllocatedImage sourceImage
 
 void MainEngine::init_vulkan()
 {
-	
+
 	VkResult res = volkInitialize();
 	if (res != VK_SUCCESS) {
 		throw std::runtime_error("Failed to initialize volk");
@@ -224,7 +224,7 @@ void MainEngine::init_vulkan()
 	vkb::InstanceBuilder builder;
 
 	// make the vulkan instance, with basic debug features
-	auto inst_ret = builder.set_app_name("Will's Vulkan Renderer")
+	auto inst_ret = builder.set_app_name("Equirectangular-To-Cubemap")
 		.request_validation_layers(USE_VALIDATION_LAYERS)
 		.use_default_debug_messenger()
 		.require_api_version(1, 3)
@@ -285,7 +285,7 @@ void MainEngine::init_vulkan()
 	_device = vkbDevice.device;
 	_physicalDevice = targetDevice.physical_device;
 
-	
+
 	// Graphics Queue
 	_graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
 	_graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
@@ -412,19 +412,9 @@ void MainEngine::layout_imgui()
 
 	if (ImGui::Begin("Main")) {
 		ImGui::InputText("Path to Equirecangular Image", &_equirectangularPath);
-		if (ImGui::Button("Load Equirectangular Image")) {
-			int width, height, channels;
-			float* data = stbi_loadf(_equirectangularPath.c_str(), &width, &height, &channels, 4);
-			if (data) {
-				fmt::print("Loaded Equirectangular Image \"{}\": {}x{}x{}\n", _equirectangularPath, width, height, channels);
-				if (_cubemapImage.image != _errorCheckerboardImage.image) destroy_image(_cubemapImage);
-				_cubemapImage = create_image(data, width * height * 4 * sizeof(float), VkExtent3D{ (uint32_t)width, (uint32_t)height, 1 }, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, true);
-				stbi_image_free(data);
-			}
-			else {
-				fmt::print("Failed to load Equirectangular Image\n");
-			}
-		}
+
+		if (ImGui::Button("Load Equirectangular Image"))  load_equirectangular_image(_equirectangularPath.data());
+		if (ImGui::Button("Create Cubemap")) create_cubemap_from_equirectangular(_cubemapImage);
 
 		ImGui::Text("Frame Time: %.2f ms", frameTime);
 		ImGui::Text("Draw Time: %.2f ms", drawTime);
@@ -497,67 +487,143 @@ void MainEngine::init_default_data()
 
 void MainEngine::init_pipeline()
 {
+	// Fullscreen Background Pipeline
 	{
-		DescriptorLayoutBuilder layoutBuilder;
-		layoutBuilder.add_binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		{
+			DescriptorLayoutBuilder layoutBuilder;
+			layoutBuilder.add_binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
-		_fullscreenDescriptorSetLayout = layoutBuilder.build(_device, VK_SHADER_STAGE_FRAGMENT_BIT
-			, nullptr, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
+			_fullscreenDescriptorSetLayout = layoutBuilder.build(_device, VK_SHADER_STAGE_FRAGMENT_BIT
+				, nullptr, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
 
+		}
+		_fullscreenDescriptorBuffer = DescriptorBufferSampler(_instance, _device
+			, _physicalDevice, _allocator, _fullscreenDescriptorSetLayout, 1);
+
+		VkDescriptorImageInfo fullscreenCombined{};
+		fullscreenCombined.sampler = _defaultSamplerNearest;
+		fullscreenCombined.imageView = _errorCheckerboardImage.imageView;
+		fullscreenCombined.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		// needs to match the order of the bindings in the layout
+		std::vector<DescriptorImageData> combined_descriptor = {
+			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &fullscreenCombined, 1 }
+		};
+		_fullscreenDescriptorBuffer.setup_data(_device, combined_descriptor);
+
+		VkPipelineLayoutCreateInfo layout_info = vkinit::pipeline_layout_create_info();
+		layout_info.setLayoutCount = 1;
+		layout_info.pSetLayouts = &_fullscreenDescriptorSetLayout;
+		layout_info.pPushConstantRanges = nullptr;
+		layout_info.pushConstantRangeCount = 0;
+
+		VK_CHECK(vkCreatePipelineLayout(_device, &layout_info, nullptr, &_fullscreenPipelineLayout));
+
+
+		_fullscreenPipeline = {};
+
+		_fullscreenPipeline.init_input_assembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+		_fullscreenPipeline.init_rasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+		if (USE_MSAA) _fullscreenPipeline.enable_msaa(MSAA_SAMPLES);
+		else _fullscreenPipeline.disable_multisampling();
+
+		_fullscreenPipeline.init_blending(ShaderObject::BlendMode::NO_BLEND);
+		_fullscreenPipeline.disable_depthtesting();
+
+
+		_fullscreenPipeline._stages[0] = VK_SHADER_STAGE_VERTEX_BIT;
+		_fullscreenPipeline._stages[1] = VK_SHADER_STAGE_FRAGMENT_BIT;
+		_fullscreenPipeline._stages[2] = VK_SHADER_STAGE_GEOMETRY_BIT;
+
+
+		vkutil::create_shader_objects(
+			"shaders/fullscreen.vert.spv", "shaders/fullscreen.frag.spv"
+			, _device, _fullscreenPipeline._shaders
+			, 1, &_fullscreenDescriptorSetLayout
+			, 0, nullptr
+		);
+
+
+		_mainDeletionQueue.push_function([=]() {
+			vkDestroyDescriptorSetLayout(_device, _fullscreenDescriptorSetLayout, nullptr);
+			_fullscreenDescriptorBuffer.destroy(_device, _allocator);
+			vkDestroyPipelineLayout(_device, _fullscreenPipelineLayout, nullptr);
+			vkDestroyShaderEXT(_device, _fullscreenPipeline._shaders[0], nullptr);
+			vkDestroyShaderEXT(_device, _fullscreenPipeline._shaders[1], nullptr);
+			});
 	}
-	_fullscreenDescriptorBuffer = DescriptorBufferSampler(_instance, _device
-		, _physicalDevice, _allocator, _fullscreenDescriptorSetLayout, 1);
 
-	VkDescriptorImageInfo fullscreenCombined{};
-	fullscreenCombined.sampler = _defaultSamplerNearest;
-	fullscreenCombined.imageView = _errorCheckerboardImage.imageView;
-	fullscreenCombined.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	// needs to match the order of the bindings in the layout
-	std::vector<DescriptorImageData> combined_descriptor = {
-		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &fullscreenCombined, 1 }
-	};
-	_fullscreenDescriptorBuffer.setup_data(_device, combined_descriptor);
+	// Equirectangular to Cubemap Compute Pipeline
+	{
+		{
+			DescriptorLayoutBuilder layoutBuilder;
+			layoutBuilder.add_binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+			layoutBuilder.add_binding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 
-	VkPipelineLayoutCreateInfo layout_info = vkinit::pipeline_layout_create_info();
-	layout_info.setLayoutCount = 1;
-	layout_info.pSetLayouts = &_fullscreenDescriptorSetLayout;
-	layout_info.pPushConstantRanges = nullptr;
-	layout_info.pushConstantRangeCount = 0;
+			_cubemapDescriptorSetLayout = layoutBuilder.build(_device, VK_SHADER_STAGE_COMPUTE_BIT
+				, nullptr, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
+		}
+		_cubemapDescriptorBuffer = DescriptorBufferSampler(_instance, _device
+			, _physicalDevice, _allocator, _cubemapDescriptorSetLayout, 1);
 
-	VK_CHECK(vkCreatePipelineLayout(_device, &layout_info, nullptr, &_fullscreenPipelineLayout));
+		// init w/ dummy image
+		{
+			
+		}
 
+		VkDescriptorImageInfo cubemapCombined{};
+		cubemapCombined.sampler = _defaultSamplerNearest;
+		cubemapCombined.imageView = _errorCheckerboardImage.imageView;
+		cubemapCombined.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-	_fullscreenPipeline = {};
-
-	_fullscreenPipeline.init_input_assembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-	_fullscreenPipeline.init_rasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-	if (USE_MSAA) _fullscreenPipeline.enable_msaa(MSAA_SAMPLES);
-	else _fullscreenPipeline.disable_multisampling();
-	
-	_fullscreenPipeline.init_blending(ShaderObject::BlendMode::NO_BLEND);
-	_fullscreenPipeline.disable_depthtesting();
+		VkDescriptorImageInfo cubemapStorage{};
+		cubemapStorage.sampler = VK_NULL_HANDLE;
+		cubemapStorage.imageView = _cubemapImage.imageView;
+		cubemapStorage.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
 
-	_fullscreenPipeline._stages[0] = VK_SHADER_STAGE_VERTEX_BIT;
-	_fullscreenPipeline._stages[1] = VK_SHADER_STAGE_FRAGMENT_BIT;
-	_fullscreenPipeline._stages[2] = VK_SHADER_STAGE_GEOMETRY_BIT;
+		VkDescriptorSetLayout layouts[]{ _cubemapDescriptorSetLayout };
+
+		VkPipelineLayoutCreateInfo layout_info{};
+		layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		layout_info.setLayoutCount = 1;
+		layout_info.pSetLayouts = layouts;
+		layout_info.pPushConstantRanges = nullptr;
+		layout_info.pushConstantRangeCount = 0;
+
+		VK_CHECK(vkCreatePipelineLayout(_device, &layout_info, nullptr, &_cubemapPipelineLayout));
 
 
-	vkutil::create_shader_objects(
-		"shaders/fullscreen.vert.spv", "shaders/fullscreen.frag.spv"
-		, _device, _fullscreenPipeline._shaders
-		, 1, &_fullscreenDescriptorSetLayout
-		, 0, nullptr
-	);
+		VkShaderModule computeShader;
+		if (!vkutil::load_shader_module("shaders/equitoface.comp.spv", _device, &computeShader)) {
+			fmt::print("Error when building the compute shader (equitoface.comp.spv)\n"); abort();
+		}
 
+		VkPipelineShaderStageCreateInfo stageinfo{};
+		stageinfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		stageinfo.pNext = nullptr;
+		stageinfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+		stageinfo.module = computeShader;
+		stageinfo.pName = "main"; // entry point in shader
 
-	_mainDeletionQueue.push_function([=]() {
-		vkDestroyDescriptorSetLayout(_device, _fullscreenDescriptorSetLayout, nullptr);
-		_fullscreenDescriptorBuffer.destroy(_device, _allocator);
-		vkDestroyPipelineLayout(_device, _fullscreenPipelineLayout, nullptr);
-		vkDestroyShaderEXT(_device, _fullscreenPipeline._shaders[0], nullptr);
-		vkDestroyShaderEXT(_device, _fullscreenPipeline._shaders[1], nullptr);
-		});
+		VkComputePipelineCreateInfo computePipelineCreateInfo{};
+		computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+		computePipelineCreateInfo.pNext = nullptr;
+		computePipelineCreateInfo.layout = _cubemapPipelineLayout;
+		computePipelineCreateInfo.stage = stageinfo;
+		computePipelineCreateInfo.flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+
+		VK_CHECK(vkCreateComputePipelines(_device, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &_cubemapPipeline));
+
+		vkDestroyShaderModule(_device, computeShader, nullptr);
+
+		_mainDeletionQueue.push_function([=]() {
+			vkDestroyDescriptorSetLayout(_device, _cubemapDescriptorSetLayout, nullptr);
+			vkDestroyPipelineLayout(_device, _cubemapPipelineLayout, nullptr);
+			vkDestroyPipeline(_device, _cubemapPipeline, nullptr);
+			_cubemapDescriptorBuffer.destroy(_device, _allocator);
+			});
+	}
+
 }
 
 
@@ -673,6 +739,94 @@ void MainEngine::destroy_draw_iamges() {
 	}
 }
 
+void MainEngine::load_equirectangular_image(const char* path)
+{
+	int width, height, channels;
+	float* data = stbi_loadf(_equirectangularPath.c_str(), &width, &height, &channels, 4);
+	if (data) {
+		fmt::print("Loaded Equirectangular Image \"{}\": {}x{}x{}\n", _equirectangularPath, width, height, channels);
+		if (_cubemapImage.image != _errorCheckerboardImage.image) destroy_image(_cubemapImage);
+		_cubemapImage = create_image(data, width * height * 4 * sizeof(float), VkExtent3D{ (uint32_t)width, (uint32_t)height, 1 }, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+		stbi_image_free(data);
+	}
+	else {
+		fmt::print("Failed to load Equirectangular Image\n");
+	}
+}
+
+void MainEngine::create_cubemap_from_equirectangular(AllocatedImage sourceEquiectImage)
+{
+	// Cubemap image
+	{
+		AllocatedImage newImage{};
+		newImage.imageFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+		newImage.imageExtent = { 1024, 1024, 1 };
+
+		VkImageCreateInfo img_info = vkinit::image_create_info(VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, { 1024,1024, 1 });
+		img_info.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+		img_info.arrayLayers = 6;
+
+		// always allocate images on dedicated GPU memory
+		VmaAllocationCreateInfo allocinfo = {};
+		allocinfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+		allocinfo.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+		// allocate and create the image
+		VK_CHECK(vmaCreateImage(_allocator, &img_info, &allocinfo, &newImage.image, &newImage.allocation, nullptr));
+
+		VkImageAspectFlags aspectFlag = VK_IMAGE_ASPECT_COLOR_BIT;
+
+		VkImageViewCreateInfo view_info = vkinit::imageview_create_info(VK_FORMAT_R32G32B32A32_SFLOAT, newImage.image, aspectFlag);
+		view_info.subresourceRange.levelCount = img_info.mipLevels;
+
+		VK_CHECK(vkCreateImageView(_device, &view_info, nullptr, &newImage.imageView));
+
+		splitCubemapImage = newImage;
+	}
+
+	
+
+	VkDescriptorImageInfo fullscreenCombined{};
+	fullscreenCombined.sampler = _defaultSamplerNearest;
+	fullscreenCombined.imageView = sourceEquiectImage.imageView;
+	fullscreenCombined.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+	VkDescriptorImageInfo storageCombined{};
+	storageCombined.sampler = _defaultSamplerNearest;
+	storageCombined.imageView = splitCubemapImage.imageView;
+	storageCombined.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+	// needs to match the order of the bindings in the layout
+	std::vector<DescriptorImageData> combined_descriptor = {
+		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &fullscreenCombined, 1 },
+		{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &storageCombined, 1 }
+	};
+
+
+	_cubemapDescriptorBuffer.setup_data(_device, combined_descriptor, 0);
+
+
+	immediate_submit([&](VkCommandBuffer cmd) {
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _cubemapPipeline);
+
+		vkutil::transition_image(cmd, splitCubemapImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		vkutil::transition_image(cmd, _cubemapImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+
+		VkDescriptorBufferBindingInfoEXT descriptor_buffer_binding_info =
+			_cubemapDescriptorBuffer.get_descriptor_buffer_binding_info(_device);
+		vkCmdBindDescriptorBuffersEXT(cmd, 1, &descriptor_buffer_binding_info);
+		uint32_t images_index = 0;
+		VkDeviceSize offset = 0;
+
+		vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _cubemapPipelineLayout
+					, 0, 1, &images_index, &offset);
+
+		vkCmdDispatch(cmd, 1024 / 32, 1024 / 32, 6);
+	});
+
+}
+
+
 void MainEngine::cleanup() {
 	fmt::print("================================================================================\n");
 	fmt::print("Cleaning up\n");
@@ -691,7 +845,7 @@ void MainEngine::cleanup() {
 
 	_mainDeletionQueue.flush();
 
-	destroy_image(_cubemapImage);
+	if (_cubemapImage.image != _errorCheckerboardImage.image) destroy_image(_cubemapImage);
 
 	ImGui_ImplVulkan_Shutdown();
 	vkDestroyDescriptorPool(_device, imguiPool, nullptr);
@@ -744,7 +898,7 @@ void MainEngine::immediate_submit(std::function<void(VkCommandBuffer cmd)>&& fun
 
 	VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submitInfo, _immFence));
 
-	VK_CHECK(vkWaitForFences(_device, 1, &_immFence, true, 1000000000));
+	VK_CHECK(vkWaitForFences(_device, 1, &_immFence, true, 100000000000));
 }
 
 

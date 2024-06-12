@@ -7,7 +7,7 @@ The templates are designed to be as simple as possible, while still providing a 
 # 1 Requirements
 
 A GPU that supports Vulkan 1.3.
-Visual Studio 2022 or later.
+Visual Studio 2022.
 
 
 # 2 Getting Started
@@ -27,6 +27,6 @@ This is a branch of the main repository that contains a simple Vulkan applicatio
 
 # TODO
 
-	- Environment Map the Cubemap
+	- Environment Map background based on currently loaded cubemap
 	- Reflective Spheres (Reflections)
-	- Metallic/Rough Spheres (Irradiance)
+	- Metallic/Rough Spheres (Irradiance Mapping)

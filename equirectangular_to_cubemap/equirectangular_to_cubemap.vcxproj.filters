@@ -112,5 +112,14 @@
     <None Include="shaders\fullscreen.vert">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="shaders\equitoface.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\equitoface.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\equitoface.comp">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

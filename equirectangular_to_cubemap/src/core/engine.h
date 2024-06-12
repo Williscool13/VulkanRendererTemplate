@@ -101,6 +101,9 @@ public:
 	std::string _equirectangularPath;
 	AllocatedImage _cubemapImage;
 
+	//AllocatedImage _cubemapFaces[6];
+	AllocatedImage splitCubemapImage;
+
 #pragma region Images
 	AllocatedImage create_image(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	AllocatedImage create_image(void* data, size_t dataSize, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
@@ -121,6 +124,12 @@ public:
 	VkDescriptorSetLayout _fullscreenDescriptorSetLayout;
 	DescriptorBufferSampler _fullscreenDescriptorBuffer;
 	ShaderObject _fullscreenPipeline;
+
+
+	VkDescriptorSetLayout _cubemapDescriptorSetLayout;
+	VkPipelineLayout _cubemapPipelineLayout;
+	DescriptorBufferSampler _cubemapDescriptorBuffer;
+	VkPipeline _cubemapPipeline;
 
 	void init();
 	void run();
@@ -148,5 +157,8 @@ private:
 	void create_draw_images(uint32_t width, uint32_t height);
 	void destroy_swapchain();
 	void destroy_draw_iamges();
+
+	void load_equirectangular_image(const char* path);
+	void create_cubemap_from_equirectangular(AllocatedImage sourceEquiectImage);
 };
 

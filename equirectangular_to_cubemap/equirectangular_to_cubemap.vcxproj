@@ -24,6 +24,7 @@
     <ProjectGuid>{9b845ebe-d142-4327-8b23-449f7ed96193}</ProjectGuid>
     <RootNamespace>equirectangulartocubemap</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>equirectangular_to_cubemap</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -164,6 +165,9 @@
     <ClInclude Include="src\core\vk_types.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="shaders\equitoface.comp" />
+    <None Include="shaders\equitoface.frag" />
+    <None Include="shaders\equitoface.vert" />
     <None Include="shaders\fullscreen.frag" />
     <None Include="shaders\fullscreen.vert" />
   </ItemGroup>
