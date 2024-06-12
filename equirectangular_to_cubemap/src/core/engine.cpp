@@ -4,6 +4,7 @@
 // defined here because needs implementation in translation unit
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image/stb_image.h>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image/stb_image_write.h>
 
 #define VMA_IMPLEMENTATION
@@ -47,9 +48,8 @@ void MainEngine::init() {
 
 	init_dearimgui();
 
-	init_pipeline();
+	init_pipelines();
 
-	_cubemapImage = _errorCheckerboardImage;
 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -411,13 +411,73 @@ void MainEngine::layout_imgui()
 	ImGui::NewFrame();
 
 	if (ImGui::Begin("Main")) {
-		ImGui::InputText("Path to Equirecangular Image", &_equirectangularPath);
+		const char* items[] = { "Equirectangular Fullscreen", "Environment Cubemap" };
+		static int current_render_view = 0;
+		
+		if (ImGui::BeginCombo("Render View", items[current_render_view], 0)) {
+			for (int i = 0; i < std::size(items); i++) {
+				bool is_selected = (current_render_view == i);
+				if (ImGui::Selectable(items[i], is_selected)) {
+					current_render_view = i;
+				}
+				if (is_selected) {
+					ImGui::SetItemDefaultFocus();
+				}
+			}
+			ImGui::EndCombo();
+		}
 
-		if (ImGui::Button("Load Equirectangular Image"))  load_equirectangular_image(_equirectangularPath.data());
-		if (ImGui::Button("Create Cubemap")) create_cubemap_from_equirectangular(_cubemapImage);
 
-		ImGui::Text("Frame Time: %.2f ms", frameTime);
-		ImGui::Text("Draw Time: %.2f ms", drawTime);
+
+		if (ImGui::CollapsingHeader("Load Cubemap (From Equirectangular Image)")) {
+			ImGui::InputText("Path to Equirecangular Image", &_equirectangularPath);
+			ImGui::Checkbox("Flip Y", &_flipY);
+
+			if (ImGui::Button("Load Image")) {
+				if (load_equirectangular_image(_equirectangularPath.data())) {
+					_cubemapImagePath = _equirectangularPath;
+					create_cubemap_from_equirectangular();
+					fmt::print("Cubemap Created\n");
+
+				}
+			}
+
+
+		}
+		
+		if (ImGui::CollapsingHeader("Cubemap Save")) {
+			ImGui::Checkbox("Enable Custom Save Path", &_customOutputPath);
+			if (_customOutputPath) {
+				ImGui::InputText("Cubemap Save Path", &_cubemapSavePath);
+			}
+			
+			if (ImGui::Button("Save Cubemap")) {
+				fmt::print("--------------------------------------------------------------------------------\n");
+				fmt::print("Saving Cubemap\n");
+				std::string p;
+				if (_customOutputPath) {
+					p = _cubemapSavePath;
+				}
+				else {
+					p = getParentFolder(_cubemapImagePath);
+				}
+				save_cubemap(p.data());
+				fmt::print("Cubemap Saved\n");
+				fmt::print("--------------------------------------------------------------------------------\n");
+
+			}
+
+		}
+
+
+
+
+
+		if (ImGui::CollapsingHeader("Frame Data")) {
+			ImGui::Text("Frame Time: %.2f ms", frameTime);
+			ImGui::Text("Draw Time: %.2f ms", drawTime);
+		}
+		
 	}
 	ImGui::End();
 	ImGui::Render();
@@ -485,7 +545,7 @@ void MainEngine::init_default_data()
 #pragma endregion
 }
 
-void MainEngine::init_pipeline()
+void MainEngine::init_pipelines()
 {
 	// Fullscreen Background Pipeline
 	{
@@ -565,9 +625,80 @@ void MainEngine::init_pipeline()
 		_cubemapDescriptorBuffer = DescriptorBufferSampler(_instance, _device
 			, _physicalDevice, _allocator, _cubemapDescriptorSetLayout, 1);
 
-		// init w/ dummy image
+		// init pipeline data
 		{
-			
+			// Equirectangular Image
+			{
+				int width, height, channels;
+				float* data = stbi_loadf("src_images\\dam_bridge_4k.hdr", &width, &height, &channels, 4);
+				if (data) {
+					fmt::print("Loaded Initial Image \"{}\": {}x{}x{}\n", "src_images\\dam_bridge_4k.hdr", width, height, channels);
+					_cubemapImage = create_image(data, width * height * 4 * sizeof(float), VkExtent3D{ (uint32_t)width, (uint32_t)height, 1 }, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+					stbi_image_free(data);
+				}
+				else {
+					fmt::print("Failed to load Initial Image. Did you delete \\src_images\\dam_bridge_4k.hdr?\n");
+					abort();
+				}
+			}
+			_cubemapImagePath = "src_images\\dam_bridge_4k.hdr";
+
+			// Cubemap Image
+			{
+				AllocatedImage newImage{};
+				newImage.imageFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+				newImage.imageExtent = { 1024, 1024, 1 };
+
+				VkImageCreateInfo img_info = vkinit::image_create_info(
+					VK_FORMAT_R32G32B32A32_SFLOAT
+					, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT
+					, { 1024,1024, 1 });
+				img_info.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+				img_info.arrayLayers = 6;
+
+				// always allocate images on dedicated GPU memory
+				VmaAllocationCreateInfo allocinfo = {};
+				allocinfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+				allocinfo.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+				// allocate and create the image
+				VK_CHECK(vmaCreateImage(_allocator, &img_info, &allocinfo, &newImage.image, &newImage.allocation, nullptr));
+
+				VkImageAspectFlags aspectFlag = VK_IMAGE_ASPECT_COLOR_BIT;
+
+				VkImageViewCreateInfo view_info = vkinit::imageview_create_info(VK_FORMAT_R32G32B32A32_SFLOAT, newImage.image, aspectFlag);
+				view_info.subresourceRange.levelCount = img_info.mipLevels;
+				view_info.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+				view_info.subresourceRange.layerCount = img_info.arrayLayers;
+
+				VK_CHECK(vkCreateImageView(_device, &view_info, nullptr, &newImage.imageView));
+
+				splitCubemapImage = newImage;
+			}
+
+
+
+			VkDescriptorImageInfo fullscreenCombined{};
+			fullscreenCombined.sampler = _defaultSamplerNearest;
+			fullscreenCombined.imageView = _cubemapImage.imageView;
+			fullscreenCombined.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+			VkDescriptorImageInfo storageCombined{};
+			storageCombined.sampler = _defaultSamplerNearest;
+			storageCombined.imageView = splitCubemapImage.imageView;
+			storageCombined.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+			// needs to match the order of the bindings in the layout
+			std::vector<DescriptorImageData> combined_descriptor = {
+				{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &fullscreenCombined, 1 },
+				{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &storageCombined, 1 }
+			};
+
+
+			_cubemapDescriptorBuffer.setup_data(_device, combined_descriptor);
+
+
+
 		}
 
 		VkDescriptorImageInfo cubemapCombined{};
@@ -580,6 +711,10 @@ void MainEngine::init_pipeline()
 		cubemapStorage.imageView = _cubemapImage.imageView;
 		cubemapStorage.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
+		VkPushConstantRange pushConstantRange = {};
+		pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+		pushConstantRange.offset = 0;
+		pushConstantRange.size = sizeof(PushConstantData);
 
 		VkDescriptorSetLayout layouts[]{ _cubemapDescriptorSetLayout };
 
@@ -587,8 +722,8 @@ void MainEngine::init_pipeline()
 		layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		layout_info.setLayoutCount = 1;
 		layout_info.pSetLayouts = layouts;
-		layout_info.pPushConstantRanges = nullptr;
-		layout_info.pushConstantRangeCount = 0;
+		layout_info.pushConstantRangeCount = 1;
+		layout_info.pPushConstantRanges = &pushConstantRange;
 
 		VK_CHECK(vkCreatePipelineLayout(_device, &layout_info, nullptr, &_cubemapPipelineLayout));
 
@@ -739,7 +874,7 @@ void MainEngine::destroy_draw_iamges() {
 	}
 }
 
-void MainEngine::load_equirectangular_image(const char* path)
+bool MainEngine::load_equirectangular_image(const char* path)
 {
 	int width, height, channels;
 	float* data = stbi_loadf(_equirectangularPath.c_str(), &width, &height, &channels, 4);
@@ -748,21 +883,28 @@ void MainEngine::load_equirectangular_image(const char* path)
 		if (_cubemapImage.image != _errorCheckerboardImage.image) destroy_image(_cubemapImage);
 		_cubemapImage = create_image(data, width * height * 4 * sizeof(float), VkExtent3D{ (uint32_t)width, (uint32_t)height, 1 }, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 		stbi_image_free(data);
+		return true;
 	}
 	else {
 		fmt::print("Failed to load Equirectangular Image\n");
+		return false;
 	}
 }
 
-void MainEngine::create_cubemap_from_equirectangular(AllocatedImage sourceEquiectImage)
+void MainEngine::create_cubemap_from_equirectangular()
 {
 	// Cubemap image
 	{
+		destroy_image(splitCubemapImage);
+		
 		AllocatedImage newImage{};
 		newImage.imageFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
 		newImage.imageExtent = { 1024, 1024, 1 };
 
-		VkImageCreateInfo img_info = vkinit::image_create_info(VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, { 1024,1024, 1 });
+		VkImageCreateInfo img_info = vkinit::image_create_info(
+			VK_FORMAT_R32G32B32A32_SFLOAT
+			, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT
+			, { 1024,1024, 1 });
 		img_info.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
 		img_info.arrayLayers = 6;
 
@@ -778,6 +920,8 @@ void MainEngine::create_cubemap_from_equirectangular(AllocatedImage sourceEquiec
 
 		VkImageViewCreateInfo view_info = vkinit::imageview_create_info(VK_FORMAT_R32G32B32A32_SFLOAT, newImage.image, aspectFlag);
 		view_info.subresourceRange.levelCount = img_info.mipLevels;
+		view_info.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+		view_info.subresourceRange.layerCount = img_info.arrayLayers;
 
 		VK_CHECK(vkCreateImageView(_device, &view_info, nullptr, &newImage.imageView));
 
@@ -788,7 +932,7 @@ void MainEngine::create_cubemap_from_equirectangular(AllocatedImage sourceEquiec
 
 	VkDescriptorImageInfo fullscreenCombined{};
 	fullscreenCombined.sampler = _defaultSamplerNearest;
-	fullscreenCombined.imageView = sourceEquiectImage.imageView;
+	fullscreenCombined.imageView = _cubemapImage.imageView;
 	fullscreenCombined.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 	VkDescriptorImageInfo storageCombined{};
@@ -803,7 +947,7 @@ void MainEngine::create_cubemap_from_equirectangular(AllocatedImage sourceEquiec
 	};
 
 
-	_cubemapDescriptorBuffer.setup_data(_device, combined_descriptor, 0);
+	_cubemapDescriptorBuffer.set_data(_device, combined_descriptor, 0);
 
 
 	immediate_submit([&](VkCommandBuffer cmd) {
@@ -821,9 +965,64 @@ void MainEngine::create_cubemap_from_equirectangular(AllocatedImage sourceEquiec
 		vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _cubemapPipelineLayout
 					, 0, 1, &images_index, &offset);
 
-		vkCmdDispatch(cmd, 1024 / 32, 1024 / 32, 6);
+
+		PushConstantData pushData{};
+		pushData.flipY = _flipY;
+		vkCmdPushConstants(cmd, _cubemapPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstantData), &pushData);
+
+		vkCmdDispatch(cmd, 1024 / 16, 1024 / 16, 6);
 	});
 
+}
+
+void MainEngine::save_cubemap(const char* path)
+{
+	size_t data_size = 1024 * 1024 * 4 * 6 * sizeof(float);
+	AllocatedBuffer _stagingBuffer =  create_staging_buffer(data_size);
+
+	immediate_submit([&](VkCommandBuffer cmd) {
+		VkImageSubresourceLayers subresource = {};
+		subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		subresource.mipLevel = 0;
+		subresource.baseArrayLayer = 0;
+		subresource.layerCount = 1;
+
+		std::vector<VkBufferImageCopy> bufferCopyRegions;
+		VkDeviceSize offset = 0;
+		
+		for (uint32_t face = 0; face < 6; face++) {
+			subresource.baseArrayLayer = face;
+
+			VkBufferImageCopy bufferCopyRegion{};
+			bufferCopyRegion.imageSubresource = subresource;
+			bufferCopyRegion.imageExtent = { 1024, 1024, 1 };
+			bufferCopyRegion.bufferOffset = offset;
+			bufferCopyRegion.bufferRowLength = 0;
+			bufferCopyRegion.bufferImageHeight = 0;
+
+			bufferCopyRegions.push_back(bufferCopyRegion);
+			offset += 1024 * 1024 * 4 * sizeof(float);
+		}
+
+		vkutil::transition_image(cmd, splitCubemapImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		vkutil::transition_image(cmd, _cubemapImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+
+		vkCmdCopyImageToBuffer(cmd, splitCubemapImage.image, VK_IMAGE_LAYOUT_GENERAL, _stagingBuffer.buffer, bufferCopyRegions.size(), bufferCopyRegions.data());
+
+	});
+
+	void* data = _stagingBuffer.info.pMappedData;
+	float* imageData = static_cast<float*>(data);
+
+	std::string directory = path;
+
+	for (uint32_t face = 0; face < 6; face++) {
+		std::string facePath = directory + "\\" + "cubemap_face_" + std::to_string(face) + ".hdr";;
+		stbi_write_hdr(facePath.c_str(), 1024, 1024, 4, imageData + (1024 * 1024 * 4 * face));
+		fmt::print("Saved face {} to: {}\n", face, facePath);
+	}
+
+	destroy_buffer(_stagingBuffer);
 }
 
 
@@ -835,17 +1034,12 @@ void MainEngine::cleanup() {
 	SDL_SetRelativeMouseMode(SDL_FALSE);
 
 	vkDeviceWaitIdle(_device);
-	//loadedMultiDrawScenes.clear();
-
-	//vkDestroyDescriptorSetLayout(_device, bufferAddressesDescriptorSetLayout, nullptr);
-	//vkDestroyDescriptorSetLayout(_device, sceneDataDescriptorSetLayout, nullptr);
-	//vkDestroyDescriptorSetLayout(_device, textureDescriptorSetLayout, nullptr);
-	//vkDestroyDescriptorSetLayout(_device, computeCullingDescriptorSetLayout, nullptr);
-
 
 	_mainDeletionQueue.flush();
 
-	if (_cubemapImage.image != _errorCheckerboardImage.image) destroy_image(_cubemapImage);
+	destroy_image(_cubemapImage);
+	destroy_image(splitCubemapImage);
+	
 
 	ImGui_ImplVulkan_Shutdown();
 	vkDestroyDescriptorPool(_device, imguiPool, nullptr);
@@ -1029,7 +1223,7 @@ AllocatedBuffer MainEngine::create_buffer(size_t allocSize, VkBufferUsageFlags u
 
 AllocatedBuffer MainEngine::create_staging_buffer(size_t allocSize)
 {
-	return create_buffer(allocSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	return create_buffer(allocSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 }
 
 void MainEngine::copy_buffer(AllocatedBuffer src, AllocatedBuffer dst, VkDeviceSize size)
@@ -1059,3 +1253,10 @@ void MainEngine::destroy_buffer(const AllocatedBuffer& buffer)
 	vmaDestroyBuffer(_allocator, buffer.buffer, buffer.allocation);
 }
 #pragma endregion
+
+
+std::string MainEngine::getParentFolder(const std::string& filePath) {
+	std::filesystem::path path(filePath);
+	std::filesystem::path parentPath = path.parent_path();
+	return parentPath.string();
+}

@@ -39,6 +39,13 @@ struct FrameData {
 	DeletionQueue _deletionQueue;
 };
 
+struct PushConstantData {
+	bool flipY;
+	float pad;
+	float pad2;
+	float pad3;
+};
+
 
 class MainEngine {
 public:
@@ -97,12 +104,15 @@ public:
 	VkSampler _defaultSamplerLinear;
 	VkSampler _defaultSamplerNearest;
 
-	// Cubemap
+	// Application Data
 	std::string _equirectangularPath;
-	AllocatedImage _cubemapImage;
-
-	//AllocatedImage _cubemapFaces[6];
-	AllocatedImage splitCubemapImage;
+	std::string _cubemapSavePath;
+	bool _flipY{ true };
+	bool _customOutputPath{ false };
+	
+	std::string _cubemapImagePath{};
+	AllocatedImage _cubemapImage; // equi image
+	AllocatedImage splitCubemapImage; // cubemap image
 
 #pragma region Images
 	AllocatedImage create_image(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
@@ -117,6 +127,7 @@ public:
 	void copy_buffer(AllocatedBuffer src, AllocatedBuffer dst, VkDeviceSize size);
 	VkDeviceAddress get_buffer_address(AllocatedBuffer buffer);
 	void destroy_buffer(const AllocatedBuffer& buffer);
+	std::string getParentFolder(const std::string& filePath);
 #pragma endregion
 
 
@@ -150,7 +161,7 @@ private:
 
 	void draw_fullscreen(VkCommandBuffer cmd, AllocatedImage sourceImage, AllocatedImage targetImage);
 
-	void init_pipeline();
+	void init_pipelines();
 
 
 	void create_swapchain(uint32_t width, uint32_t height);
@@ -158,7 +169,8 @@ private:
 	void destroy_swapchain();
 	void destroy_draw_iamges();
 
-	void load_equirectangular_image(const char* path);
-	void create_cubemap_from_equirectangular(AllocatedImage sourceEquiectImage);
+	bool load_equirectangular_image(const char* path);
+	void create_cubemap_from_equirectangular();
+	void save_cubemap(const char* path);
 };
 

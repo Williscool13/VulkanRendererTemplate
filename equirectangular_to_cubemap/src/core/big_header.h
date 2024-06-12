@@ -15,6 +15,7 @@
 #include <thread>
 #include <unordered_map>
 #include <fstream>
+#include <filesystem>
 // vulkan
 #define VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>

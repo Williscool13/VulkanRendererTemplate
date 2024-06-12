@@ -118,7 +118,7 @@ void vkutil::create_shader_objects(
 	delete[] shaderCodes[0];
 	delete[] shaderCodes[1];
 
-	fmt::print("Created Shader Object with vertex shader:\n{}\nand fragment shader:\n{}\n", vertexShader, fragmentShader);
+	fmt::print("Created Shader Object with vertex shader: {}\nand fragment shader: {}\n", vertexShader, fragmentShader);
 }
 
 
