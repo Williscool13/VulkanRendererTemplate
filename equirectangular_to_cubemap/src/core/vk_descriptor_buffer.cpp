@@ -211,10 +211,8 @@ void DescriptorBufferSampler::set_data(VkDevice device, std::vector<DescriptorIm
 }
 
 
-VkDescriptorBufferBindingInfoEXT DescriptorBufferSampler::get_descriptor_buffer_binding_info(VkDevice device)
+VkDescriptorBufferBindingInfoEXT DescriptorBufferSampler::get_descriptor_buffer_binding_info()
 {
-	//VkDeviceAddress address = get_device_address(device, descriptor_buffer.buffer);
-
 	VkDescriptorBufferBindingInfoEXT descriptor_buffer_binding_info{};
 	descriptor_buffer_binding_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
 	descriptor_buffer_binding_info.address = this->descriptor_buffer_gpu_address;
@@ -292,8 +290,7 @@ int DescriptorBufferUniform::setup_data(VkDevice device, const AllocatedBuffer& 
 
 }
 
-VkDescriptorBufferBindingInfoEXT DescriptorBufferUniform::get_descriptor_buffer_binding_info(VkDevice device) {
-	//VkDeviceAddress address = get_device_address(device, descriptor_buffer.buffer);
+VkDescriptorBufferBindingInfoEXT DescriptorBufferUniform::get_descriptor_buffer_binding_info() {
 
 	VkDescriptorBufferBindingInfoEXT descriptor_buffer_binding_info{};
 	descriptor_buffer_binding_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;

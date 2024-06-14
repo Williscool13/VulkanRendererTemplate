@@ -99,11 +99,15 @@
     <ClCompile Include="include\imgui\misc\cpp\imgui_stdlib.cpp">
       <Filter>Source Files\imgui</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="src\core\vk_types.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
+    <ClCompile Include="src\core\vk_draw_structure.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\vk_loader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\vk_types.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\fullscreen.frag">
@@ -115,5 +119,16 @@
     <None Include="shaders\equitoface.comp">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="shaders\environment.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\environment.vert">
+      <Filter>Shaders</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\core\vk_types.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

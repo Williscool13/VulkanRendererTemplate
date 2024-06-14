@@ -7,9 +7,14 @@
 #include "vk_descriptors.h"
 #include "vk_descriptor_buffer.h"
 #include "vk_pipelines.h"
+#include "vk_draw_structure.h"
+#include "vk_loader.h"
 
 constexpr unsigned int FRAME_OVERLAP = 2;
 
+
+struct LoadedGLTFMultiDraw;
+struct GLTFMetallic_RoughnessMultiDraw;
 
 struct DeletionQueue
 {
@@ -132,15 +137,24 @@ public:
 
 
 	VkPipelineLayout _fullscreenPipelineLayout;
-	VkDescriptorSetLayout _fullscreenDescriptorSetLayout;
-	DescriptorBufferSampler _fullscreenDescriptorBuffer;
 	ShaderObject _fullscreenPipeline;
 
-
-	VkDescriptorSetLayout _cubemapDescriptorSetLayout;
 	VkPipelineLayout _cubemapPipelineLayout;
-	DescriptorBufferSampler _cubemapDescriptorBuffer;
 	VkPipeline _cubemapPipeline;
+
+	VkPipelineLayout _environmentMapPipelineLayout;
+	VkPipeline _environmentMapPipeline;
+	
+	VkDescriptorSetLayout _cubemapDescriptorSetLayout;
+	DescriptorBufferSampler _cubemapDescriptorBuffer;
+	VkDescriptorSetLayout _equiImageDescriptorSetLayout;
+	DescriptorBufferSampler _equiImageDescriptorBuffer;
+
+
+	VkDescriptorSetLayout bufferAddressesDescriptorSetLayout;
+	VkDescriptorSetLayout sceneDataDescriptorSetLayout;
+	VkDescriptorSetLayout textureDescriptorSetLayout;
+	std::shared_ptr<GLTFMetallic_RoughnessMultiDraw> _metallicSpheres;
 
 	void init();
 	void run();

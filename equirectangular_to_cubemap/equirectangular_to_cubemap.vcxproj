@@ -151,9 +151,12 @@
     <ClCompile Include="src\core\main.cpp" />
     <ClCompile Include="src\core\vk_descriptors.cpp" />
     <ClCompile Include="src\core\vk_descriptor_buffer.cpp" />
+    <ClCompile Include="src\core\vk_draw_structure.cpp" />
     <ClCompile Include="src\core\vk_images.cpp" />
     <ClCompile Include="src\core\vk_initializers.cpp" />
+    <ClCompile Include="src\core\vk_loader.cpp" />
     <ClCompile Include="src\core\vk_pipelines.cpp" />
+    <ClCompile Include="src\core\vk_types.cpp" />
     <ClCompile Include="src\fastgltf\base64.cpp" />
     <ClCompile Include="src\fastgltf\fastgltf.cpp" />
     <ClCompile Include="src\fastgltf\fastgltf.ixx" />
@@ -165,6 +168,8 @@
     <ClInclude Include="src\core\vk_types.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="shaders\environment.frag" />
+    <None Include="shaders\environment.vert" />
     <None Include="shaders\equitoface.comp" />
     <None Include="shaders\fullscreen.frag" />
     <None Include="shaders\fullscreen.vert" />

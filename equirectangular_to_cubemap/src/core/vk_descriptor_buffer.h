@@ -51,7 +51,7 @@ public:
 		, VmaAllocator allocator, VkDescriptorSetLayout descriptorSetLayout, int maxObjectCount = 10);
 
 	int setup_data(VkDevice device, const AllocatedBuffer& uniform_buffer, size_t allocSize);
-	VkDescriptorBufferBindingInfoEXT get_descriptor_buffer_binding_info(VkDevice device);
+	VkDescriptorBufferBindingInfoEXT get_descriptor_buffer_binding_info();
 };
 
 
@@ -66,7 +66,7 @@ public:
 
 	int setup_data(VkDevice device, std::vector<DescriptorImageData> data);
 	void set_data(VkDevice device, std::vector<DescriptorImageData> data, int index);
-	VkDescriptorBufferBindingInfoEXT get_descriptor_buffer_binding_info(VkDevice device);
+	VkDescriptorBufferBindingInfoEXT get_descriptor_buffer_binding_info();
 };
 
 
