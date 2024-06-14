@@ -50,7 +50,7 @@ struct GLTFMetallic_RoughnessMultiDraw {
 	MultiDrawBuffers transparentDrawBuffers;
 	AllocatedBuffer boundingSphereBuffer;
 
-	void build_pipelines(MainEngine* engine, bool use_msaa, VkSampleCountFlagBits sample_count);
+	void build_pipelines(MainEngine* engine, bool use_msaa, VkSampleCountFlagBits sample_count, const char* vertShaderPath, const char* fragShaderPath);
 
 
 	// buffer building

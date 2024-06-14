@@ -3,7 +3,7 @@
 
 // defined here because needs implementation in translation unit
 #define STB_IMAGE_IMPLEMENTATION
-#include <stb_image/stb_image.h>
+#include <stb_image/stb_image.h>_drawImage
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image/stb_image_write.h>
 
@@ -17,8 +17,8 @@
 #endif
 
 #define ENABLE_FRAME_STATISTICS true
-#define USE_MSAA false
-#define MSAA_SAMPLES VK_SAMPLE_COUNT_1_BIT
+#define USE_MSAA true
+#define MSAA_SAMPLES VK_SAMPLE_COUNT_4_BIT
 
 void MainEngine::init() {
 	fmt::print("================================================================================\n");
@@ -50,31 +50,12 @@ void MainEngine::init() {
 
 	init_pipelines();
 
-	{
-		DescriptorLayoutBuilder layoutBuilder;
-		layoutBuilder.add_binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-		bufferAddressesDescriptorSetLayout = layoutBuilder.build(_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT
-			, nullptr, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
-	}
-	{
-		DescriptorLayoutBuilder layoutBuilder;
-		layoutBuilder.add_binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-		sceneDataDescriptorSetLayout = layoutBuilder.build(_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT
-			, nullptr, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
 
-	}
-	{
-		DescriptorLayoutBuilder layoutBuilder;
-		layoutBuilder.add_binding(0, VK_DESCRIPTOR_TYPE_SAMPLER, 32); // I dont expect any models to have more than 32 samplers
-		layoutBuilder.add_binding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 255); // 255 is upper limit of textures
-
-		textureDescriptorSetLayout = layoutBuilder.build(_device, VK_SHADER_STAGE_FRAGMENT_BIT
-			, nullptr, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
-	}
-
-	//_metallicSpheres = std::make_shared<GLTFMetallic_RoughnessMultiDraw>();
-	//_metallicSpheres->build_pipelines()
-
+	_metallicSpheres = std::make_shared<GLTFMetallic_RoughnessMultiDraw>();
+	std::string structurePath = { "src_assets\\MetalRoughSpheres.glb" };
+	auto metalRoughSpheres = loadGltfMultiDraw(this, structurePath);
+	_metallicSpheres->build_pipelines(this, USE_MSAA, MSAA_SAMPLES, "shaders\\pbrshader.vert.spv", "shaders\\pbrshader.frag.spv");
+	_metallicSpheres->build_buffers(this, *metalRoughSpheres.value().get());
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 	fmt::print("Finished Initialization in {} seconds\n", elapsed.count() / 1000000.0f);
@@ -101,6 +82,9 @@ void MainEngine::run() {
 
 			ImGui_ImplSDL2_ProcessEvent(&e);
 		}
+
+		if (resize_requested) { resize_swapchain(); }
+
 
 		if (stop_rendering) {
 			// throttle the speed to avoid the endless spinning
@@ -129,7 +113,7 @@ void MainEngine::draw()
 	// GPU -> GPU sync (semaphore)
 	uint32_t swapchainImageIndex;
 	VkResult e = vkAcquireNextImageKHR(_device, _swapchain, 1000000000, get_current_frame()._swapchainSemaphore, nullptr, &swapchainImageIndex);
-	//if (e == VK_ERROR_OUT_OF_DATE_KHR) { resize_requested = true; fmt::print("Swapchain out of date, resize requested\n"); return; }
+	if (e == VK_ERROR_OUT_OF_DATE_KHR) { resize_requested = true; fmt::print("Swapchain out of date, resize requested\n"); return; }
 
 	VkCommandBuffer cmd = get_current_frame()._mainCommandBuffer;
 	VK_CHECK(vkResetCommandBuffer(cmd, 0));
@@ -146,7 +130,8 @@ void MainEngine::draw()
 	VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
 
 	vkutil::transition_image(cmd, _drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	draw_fullscreen(cmd, _cubemapImage, _drawImage);
+	//draw_fullscreen(cmd, _drawImage);
+	draw_environment(cmd, _drawImage, _depthImage);
 
 	vkutil::transition_image(cmd, _drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 	vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -180,10 +165,10 @@ void MainEngine::draw()
 	presentInfo.pImageIndices = &swapchainImageIndex;
 	VkResult presentResult = vkQueuePresentKHR(_graphicsQueue, &presentInfo);
 
-	/*if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
+	if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
 		resize_requested = true;
 		fmt::print("present failed - out of date, resize requested\n");
-	}*/
+	}
 
 	//increase the number of frames drawn
 	_frameNumber++;
@@ -194,7 +179,7 @@ void MainEngine::draw()
 	drawTime = elapsed2.count() / 1000.0f;
 }
 
-void MainEngine::draw_fullscreen(VkCommandBuffer cmd, AllocatedImage sourceImage, AllocatedImage targetImage)
+void MainEngine::draw_fullscreen(VkCommandBuffer cmd, AllocatedImage targetImage)
 {
 	VkRenderingAttachmentInfo colorAttachment;
 	colorAttachment = vkinit::attachment_info(targetImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -223,6 +208,88 @@ void MainEngine::draw_fullscreen(VkCommandBuffer cmd, AllocatedImage sourceImage
 
 	vkCmdDraw(cmd, 3, 1, 0, 0);
 	vkCmdEndRendering(cmd);
+}
+
+void MainEngine::draw_environment(VkCommandBuffer cmd, AllocatedImage drawImage, AllocatedImage depthImage) {
+	//VkRenderingAttachmentInfo colorAttachment = vkinit::attachment_info(drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	//VkRenderingInfo renderInfo = vkinit::rendering_info(_drawExtent, &colorAttachment, nullptr);
+	VkRenderingAttachmentInfo depthAttachment;
+	VkRenderingAttachmentInfo colorAttachment;
+	if (USE_MSAA) {
+		VkClearValue colorClearValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+		colorAttachment = vkinit::attachment_info(_drawImageBeforeMSAA.imageView, &colorClearValue, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		colorAttachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+		colorAttachment.resolveImageView = _drawImage.imageView;
+		colorAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		VkClearValue depthClearValue = { 1.0f, 0 };
+		depthAttachment = vkinit::attachment_info(_depthImage.imageView, &depthClearValue, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+		depthAttachment.resolveMode = VK_RESOLVE_MODE_NONE;
+	}
+	else {
+		VkClearValue colorClearValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+		colorAttachment = vkinit::attachment_info(_drawImage.imageView, &colorClearValue, VK_IMAGE_LAYOUT_GENERAL);
+		VkClearValue depthClearValue = { 1.0f, 0 };
+		depthAttachment = vkinit::attachment_info(_depthImage.imageView, &depthClearValue, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+	}
+	VkRenderingInfo renderInfo = vkinit::rendering_info(_drawExtent, &colorAttachment, &depthAttachment);
+
+	vkCmdBeginRendering(cmd, &renderInfo);
+
+	_environmentPipeline.bind_viewport(cmd, static_cast<float>(_drawExtent.width), static_cast<float>(_drawExtent.height), 0.0f, 1.0f);
+	_environmentPipeline.bind_scissor(cmd, 0, 0, _drawExtent.width, _drawExtent.height);
+	_environmentPipeline.bind_input_assembly(cmd);
+	_environmentPipeline.bind_rasterization(cmd);
+	_environmentPipeline.bind_depth_test(cmd);
+	_environmentPipeline.bind_stencil(cmd);
+	_environmentPipeline.bind_multisampling(cmd);
+	_environmentPipeline.bind_blending(cmd);
+	_environmentPipeline.bind_shaders(cmd);
+	_environmentPipeline.bind_rasterizaer_discard(cmd, VK_FALSE);
+
+	{
+		SceneData sceneData = {};
+		float time = SDL_GetTicks64() / 1000.0f;
+		float angle = time / 10.0f * glm::radians(90.0f);
+
+		glm::mat4 rot = glm::rotate(glm::mat4(1.0f), angle, glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::mat4 tra = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 5.0f));
+
+		glm::vec4 target = rot * tra * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+
+		glm::mat4 _view = glm::lookAt(glm::vec3(0.0f), glm::vec3(target), glm::vec3(0.0f, 1.0f, 0.0f));
+		sceneData.view = _view;
+		//sceneData.view = glm::lookAt(glm::vec3(0.0f), glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		float aspect = static_cast<float>(_drawExtent.width) / static_cast<float>(_drawExtent.height);
+		sceneData.proj = glm::perspective(glm::radians(60.0f), aspect, 0.1f, 100.0f);
+		sceneData.viewproj = sceneData.proj * sceneData.view;
+		sceneData.ambientColor = glm::vec4(0.1f, 0.1f, 0.1f, 1.0f);
+		sceneData.sunlightDirection = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
+		sceneData.sunlightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+		sceneData.cameraPosition = glm::vec4(0.0f);
+
+		SceneData* p_scene_data = (SceneData*)_sceneDataBuffer.info.pMappedData;
+		memcpy(p_scene_data, &sceneData, sizeof(SceneData));
+	}
+	VkDescriptorBufferBindingInfoEXT bindings[2] = {
+		_cubemapDescriptorBuffer.get_descriptor_buffer_binding_info(),
+		_sceneDataDescriptorBuffer.get_descriptor_buffer_binding_info()
+	};
+	
+	vkCmdBindDescriptorBuffersEXT(cmd, 2, bindings);
+
+	constexpr uint32_t image_buffer_index = 0;
+	constexpr uint32_t scene_data_index = 1;
+	VkDeviceSize buffer_offset = 0;
+	vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _environmentPipelineLayout
+		, 0, 1, &image_buffer_index, &buffer_offset);
+	vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _environmentPipelineLayout
+		, 1, 1, &scene_data_index, &buffer_offset);
+
+
+
+	vkCmdDraw(cmd, 3, 1, 0, 0);
+	vkCmdEndRendering(cmd);
+
 }
 
 void MainEngine::init_vulkan()
@@ -490,6 +557,7 @@ void MainEngine::layout_imgui()
 			ImGui::Text("Draw Time: %.2f ms", drawTime);
 		}
 
+		ImGui::SliderFloat("Render Scale", &_renderScale, 0.1f, _maxRenderScale);
 	}
 	ImGui::End();
 	ImGui::Render();
@@ -575,11 +643,51 @@ void MainEngine::init_pipelines()
 		DescriptorLayoutBuilder layoutBuilder;
 		layoutBuilder.add_binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 
-		_cubemapDescriptorSetLayout = layoutBuilder.build(_device, VK_SHADER_STAGE_COMPUTE_BIT
+		_cubemapStorageDescriptorSetLayout = layoutBuilder.build(_device, VK_SHADER_STAGE_COMPUTE_BIT
 			, nullptr, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
+	}
+	_cubemapStorageDescriptorBuffer = DescriptorBufferSampler(_instance, _device
+		, _physicalDevice, _allocator, _cubemapStorageDescriptorSetLayout, 1);
+
+	{
+		DescriptorLayoutBuilder layoutBuilder;
+		layoutBuilder.add_binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+
+		_cubemapDescriptorSetLayout = layoutBuilder.build(_device, VK_SHADER_STAGE_FRAGMENT_BIT
+			, nullptr, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
+
 	}
 	_cubemapDescriptorBuffer = DescriptorBufferSampler(_instance, _device
 		, _physicalDevice, _allocator, _cubemapDescriptorSetLayout, 1);
+
+
+
+	{
+		DescriptorLayoutBuilder layoutBuilder;
+		layoutBuilder.add_binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+		bufferAddressesDescriptorSetLayout = layoutBuilder.build(_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT
+			, nullptr, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
+	}
+	{
+		DescriptorLayoutBuilder layoutBuilder;
+		layoutBuilder.add_binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+		sceneDataDescriptorSetLayout = layoutBuilder.build(_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT
+			, nullptr, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
+
+	}
+	{
+		DescriptorLayoutBuilder layoutBuilder;
+		layoutBuilder.add_binding(0, VK_DESCRIPTOR_TYPE_SAMPLER, 32); // I dont expect any models to have more than 32 samplers
+		layoutBuilder.add_binding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 255); // 255 is upper limit of textures
+
+		textureDescriptorSetLayout = layoutBuilder.build(_device, VK_SHADER_STAGE_FRAGMENT_BIT
+			, nullptr, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
+	}
+
+	_sceneDataBuffer = create_buffer(sizeof(SceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	_sceneDataDescriptorBuffer = DescriptorBufferUniform(_instance, _device
+			, _physicalDevice, _allocator, sceneDataDescriptorSetLayout, 1);
+	_sceneDataDescriptorBuffer.setup_data(_device, _sceneDataBuffer, sizeof(SceneData));
 
 
 	// Fullscreen Background Pipeline
@@ -633,7 +741,7 @@ void MainEngine::init_pipelines()
 		pushConstantRange.offset = 0;
 		pushConstantRange.size = sizeof(PushConstantData);
 
-		VkDescriptorSetLayout layouts[]{ _equiImageDescriptorSetLayout, _cubemapDescriptorSetLayout };
+		VkDescriptorSetLayout layouts[]{ _equiImageDescriptorSetLayout, _cubemapStorageDescriptorSetLayout };
 
 		VkPipelineLayoutCreateInfo layout_info{};
 		layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -669,20 +777,54 @@ void MainEngine::init_pipelines()
 		vkDestroyShaderModule(_device, computeShader, nullptr);
 
 		_mainDeletionQueue.push_function([=]() {
-			vkDestroyDescriptorSetLayout(_device, _cubemapDescriptorSetLayout, nullptr);
+			vkDestroyDescriptorSetLayout(_device, _cubemapStorageDescriptorSetLayout, nullptr);
 			vkDestroyPipelineLayout(_device, _cubemapPipelineLayout, nullptr);
 			vkDestroyPipeline(_device, _cubemapPipeline, nullptr);
-			_cubemapDescriptorBuffer.destroy(_device, _allocator);
+			_cubemapStorageDescriptorBuffer.destroy(_device, _allocator);
 			});
 	}
 
 	// Environment Map Background
 	{
+		VkDescriptorSetLayout layouts[2] = 
+		{ _cubemapDescriptorSetLayout, sceneDataDescriptorSetLayout };
+
 		VkPipelineLayoutCreateInfo layout_info = vkinit::pipeline_layout_create_info();
-		layout_info.setLayoutCount = 1;
-		layout_info.pSetLayouts = &_equiImageDescriptorSetLayout;
+		layout_info.setLayoutCount = 2;
+		layout_info.pSetLayouts = layouts;
 		layout_info.pPushConstantRanges = nullptr;
 		layout_info.pushConstantRangeCount = 0;
+
+		VK_CHECK(vkCreatePipelineLayout(_device, &layout_info, nullptr, &_environmentPipelineLayout));
+
+		_environmentPipeline = {};
+
+		_environmentPipeline.init_input_assembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+		_environmentPipeline.init_rasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+		if (USE_MSAA) _environmentPipeline.enable_msaa(MSAA_SAMPLES);
+		else _environmentPipeline.disable_multisampling();
+
+		_environmentPipeline.init_blending(ShaderObject::BlendMode::NO_BLEND);
+		_environmentPipeline.enable_depthtesting(true, VK_COMPARE_OP_LESS_OR_EQUAL);
+
+		_environmentPipeline._stages[0] = VK_SHADER_STAGE_VERTEX_BIT;
+		_environmentPipeline._stages[1] = VK_SHADER_STAGE_FRAGMENT_BIT;
+		_environmentPipeline._stages[2] = VK_SHADER_STAGE_GEOMETRY_BIT;
+
+		vkutil::create_shader_objects(
+			"shaders/environment.vert.spv", "shaders/environment.frag.spv"
+			, _device, _environmentPipeline._shaders
+			, 2, layouts
+			, 0, nullptr
+		);
+
+		_mainDeletionQueue.push_function([=]() {
+			vkDestroyDescriptorSetLayout(_device, _cubemapDescriptorSetLayout, nullptr);
+			_cubemapDescriptorBuffer.destroy(_device, _allocator);
+			vkDestroyPipelineLayout(_device, _environmentPipelineLayout, nullptr);
+			vkDestroyShaderEXT(_device, _environmentPipeline._shaders[0], nullptr);
+			vkDestroyShaderEXT(_device, _environmentPipeline._shaders[1], nullptr);
+			});
 	}
 
 
@@ -695,7 +837,7 @@ void MainEngine::init_pipelines()
 		float* data = stbi_loadf("src_images\\dam_bridge_4k.hdr", &width, &height, &channels, 4);
 		if (data) {
 			fmt::print("Loaded Initial Image \"{}\": {}x{}x{}\n", "src_images\\dam_bridge_4k.hdr", width, height, channels);
-			_cubemapImage = create_image(data, width * height * 4 * sizeof(float), VkExtent3D{ (uint32_t)width, (uint32_t)height, 1 }, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+			_equiImage = create_image(data, width * height * 4 * sizeof(float), VkExtent3D{ (uint32_t)width, (uint32_t)height, 1 }, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 			stbi_image_free(data);
 		}
 		else {
@@ -705,31 +847,34 @@ void MainEngine::init_pipelines()
 
 		_cubemapImagePath = "src_images\\dam_bridge_4k.hdr";
 
-		VkDescriptorImageInfo fullscreenCombined{};
-		fullscreenCombined.sampler = _defaultSamplerNearest;
-		fullscreenCombined.imageView = _cubemapImage.imageView;
-		fullscreenCombined.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		VkDescriptorImageInfo equiImageDescriptorInfo{};
+		equiImageDescriptorInfo.sampler = _defaultSamplerNearest;
+		equiImageDescriptorInfo.imageView = _equiImage.imageView;
+		equiImageDescriptorInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 		// needs to match the order of the bindings in the layout
 		std::vector<DescriptorImageData> combined_descriptor = {
-			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &fullscreenCombined, 1 }
+			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &equiImageDescriptorInfo, 1 }
 		};
 
 		_equiImageDescriptorBuffer.setup_data(_device, combined_descriptor);
 	}
 	// Cubemap Image
 	{
+		_cubemapResolution = _equiImage.imageExtent.width / 4;
+
 		{
 			AllocatedImage newImage{};
 			newImage.imageFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
-			newImage.imageExtent = { 1024, 1024, 1 };
+			newImage.imageExtent = { _cubemapResolution, _cubemapResolution, 1 };
 
 			VkImageCreateInfo img_info = vkinit::image_create_info(
 				VK_FORMAT_R32G32B32A32_SFLOAT
 				, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT
-				, { 1024,1024, 1 });
+				, { _cubemapResolution,_cubemapResolution, 1 });
 			img_info.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
 			img_info.arrayLayers = 6;
+			
 
 			// always allocate images on dedicated GPU memory
 			VmaAllocationCreateInfo allocinfo = {};
@@ -762,17 +907,17 @@ void MainEngine::init_pipelines()
 		};
 
 
-		_cubemapDescriptorBuffer.setup_data(_device, combined_descriptor);
+		_cubemapStorageDescriptorBuffer.setup_data(_device, combined_descriptor);
 
 		immediate_submit([&](VkCommandBuffer cmd) {
 			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _cubemapPipeline);
 
 			vkutil::transition_image(cmd, splitCubemapImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-			vkutil::transition_image(cmd, _cubemapImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+			vkutil::transition_image(cmd, _equiImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
 			VkDescriptorBufferBindingInfoEXT descriptor_buffer_binding_info[2] = {
 				_equiImageDescriptorBuffer.get_descriptor_buffer_binding_info(),
-				_cubemapDescriptorBuffer.get_descriptor_buffer_binding_info(),
+				_cubemapStorageDescriptorBuffer.get_descriptor_buffer_binding_info(),
 			};
 
 			vkCmdBindDescriptorBuffersEXT(cmd, 2, descriptor_buffer_binding_info);
@@ -791,11 +936,25 @@ void MainEngine::init_pipelines()
 			pushData.flipY = _flipY;
 			vkCmdPushConstants(cmd, _cubemapPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstantData), &pushData);
 
-			vkCmdDispatch(cmd, 1024 / 16, 1024 / 16, 6);
+			vkCmdDispatch(cmd, _cubemapResolution / 16, _cubemapResolution / 16, 6);
 			});
 
 	}
+	// Cubrmap Sampler
+	{
+		VkDescriptorImageInfo cubemapCombined{};
+		cubemapCombined.sampler = _defaultSamplerLinear;
+		cubemapCombined.imageView = splitCubemapImage.imageView;
+		cubemapCombined.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
+		// needs to match the order of the bindings in the layout
+		std::vector<DescriptorImageData> combined_descriptor = {
+			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &cubemapCombined, 1 }
+		};
+
+		_cubemapDescriptorBuffer.setup_data(_device, combined_descriptor);
+
+	}
 }
 
 
@@ -917,9 +1076,21 @@ bool MainEngine::load_equirectangular_image(const char* path)
 	float* data = stbi_loadf(_equirectangularPath.c_str(), &width, &height, &channels, 4);
 	if (data) {
 		fmt::print("Loaded Equirectangular Image \"{}\": {}x{}x{}\n", _equirectangularPath, width, height, channels);
-		if (_cubemapImage.image != _errorCheckerboardImage.image) destroy_image(_cubemapImage);
-		_cubemapImage = create_image(data, width * height * 4 * sizeof(float), VkExtent3D{ (uint32_t)width, (uint32_t)height, 1 }, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+		if (_equiImage.image != _errorCheckerboardImage.image) destroy_image(_equiImage);
+		_equiImage = create_image(data, width * height * 4 * sizeof(float), VkExtent3D{ (uint32_t)width, (uint32_t)height, 1 }, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 		stbi_image_free(data);
+
+		VkDescriptorImageInfo equiImageDescriptorInfo{};
+		equiImageDescriptorInfo.sampler = _defaultSamplerNearest;
+		equiImageDescriptorInfo.imageView = _equiImage.imageView;
+		equiImageDescriptorInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+		// needs to match the order of the bindings in the layout
+		std::vector<DescriptorImageData> combined_descriptor = {
+			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &equiImageDescriptorInfo, 1 }
+		};
+
+		_equiImageDescriptorBuffer.set_data(_device, combined_descriptor, 0);
 		return true;
 	}
 	else {
@@ -932,18 +1103,20 @@ void MainEngine::create_cubemap_from_equirectangular()
 {
 	auto start = std::chrono::system_clock::now();
 
+	_cubemapResolution = _equiImage.imageExtent.width / 4;
+
 	// Cubemap image
 	{
 		destroy_image(splitCubemapImage);
 
 		AllocatedImage newImage{};
 		newImage.imageFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
-		newImage.imageExtent = { 1024, 1024, 1 };
+		newImage.imageExtent = { _cubemapResolution, _cubemapResolution, 1 };
 
 		VkImageCreateInfo img_info = vkinit::image_create_info(
 			VK_FORMAT_R32G32B32A32_SFLOAT
 			, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT
-			, { 1024,1024, 1 });
+			, { _cubemapResolution,_cubemapResolution, 1 });
 		img_info.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
 		img_info.arrayLayers = 6;
 
@@ -961,7 +1134,6 @@ void MainEngine::create_cubemap_from_equirectangular()
 		view_info.subresourceRange.levelCount = img_info.mipLevels;
 		view_info.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
 		view_info.subresourceRange.layerCount = img_info.arrayLayers;
-
 		VK_CHECK(vkCreateImageView(_device, &view_info, nullptr, &newImage.imageView));
 
 		splitCubemapImage = newImage;
@@ -970,7 +1142,7 @@ void MainEngine::create_cubemap_from_equirectangular()
 
 
 	VkDescriptorImageInfo storageCombined{};
-	storageCombined.sampler = _defaultSamplerNearest;
+	storageCombined.sampler = nullptr;
 	storageCombined.imageView = splitCubemapImage.imageView;
 	storageCombined.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
@@ -980,18 +1152,18 @@ void MainEngine::create_cubemap_from_equirectangular()
 	};
 
 
-	_cubemapDescriptorBuffer.set_data(_device, storage_image, 0);
+	_cubemapStorageDescriptorBuffer.set_data(_device, storage_image, 0);
 
 
-	immediate_submit([&](VkCommandBuffer cmd) { 
+	immediate_submit([&](VkCommandBuffer cmd) {
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _cubemapPipeline);
 
+		vkutil::transition_image(cmd, _equiImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		vkutil::transition_image(cmd, splitCubemapImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-		vkutil::transition_image(cmd, _cubemapImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
 		VkDescriptorBufferBindingInfoEXT descriptor_buffer_binding_info[2] = {
 			_equiImageDescriptorBuffer.get_descriptor_buffer_binding_info(),
-			_cubemapDescriptorBuffer.get_descriptor_buffer_binding_info(),
+			_cubemapStorageDescriptorBuffer.get_descriptor_buffer_binding_info(),
 		};
 
 		vkCmdBindDescriptorBuffersEXT(cmd, 2, descriptor_buffer_binding_info);
@@ -1010,8 +1182,19 @@ void MainEngine::create_cubemap_from_equirectangular()
 		pushData.flipY = _flipY;
 		vkCmdPushConstants(cmd, _cubemapPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstantData), &pushData);
 
-		vkCmdDispatch(cmd, 1024 / 16, 1024 / 16, 6);
+		vkCmdDispatch(cmd, _cubemapResolution / 16, _cubemapResolution / 16, 6);
 		});
+
+	VkDescriptorImageInfo cubemapSampler{};
+	cubemapSampler.sampler = _defaultSamplerNearest;
+	cubemapSampler.imageView = splitCubemapImage.imageView;
+	cubemapSampler.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+	std::vector<DescriptorImageData> combined_descriptor = {
+		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &cubemapSampler, 1 }
+	};
+
+	_cubemapDescriptorBuffer.set_data(_device, combined_descriptor, 0);
 
 
 	auto end = std::chrono::system_clock::now();
@@ -1021,7 +1204,7 @@ void MainEngine::create_cubemap_from_equirectangular()
 
 void MainEngine::save_cubemap(const char* path)
 {
-	size_t data_size = 1024 * 1024 * 4 * 6 * sizeof(float);
+	size_t data_size = _cubemapResolution * _cubemapResolution * 4 * 6 * sizeof(float);
 	AllocatedBuffer _stagingBuffer = create_staging_buffer(data_size);
 
 	immediate_submit([&](VkCommandBuffer cmd) {
@@ -1039,17 +1222,17 @@ void MainEngine::save_cubemap(const char* path)
 
 			VkBufferImageCopy bufferCopyRegion{};
 			bufferCopyRegion.imageSubresource = subresource;
-			bufferCopyRegion.imageExtent = { 1024, 1024, 1 };
+			bufferCopyRegion.imageExtent = { _cubemapResolution, _cubemapResolution, 1 };
 			bufferCopyRegion.bufferOffset = offset;
 			bufferCopyRegion.bufferRowLength = 0;
 			bufferCopyRegion.bufferImageHeight = 0;
 
 			bufferCopyRegions.push_back(bufferCopyRegion);
-			offset += 1024 * 1024 * 4 * sizeof(float);
+			offset += _cubemapResolution * _cubemapResolution * 4 * sizeof(float);
 		}
 
 		vkutil::transition_image(cmd, splitCubemapImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-		vkutil::transition_image(cmd, _cubemapImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		vkutil::transition_image(cmd, _equiImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
 		vkCmdCopyImageToBuffer(cmd, splitCubemapImage.image, VK_IMAGE_LAYOUT_GENERAL, _stagingBuffer.buffer, bufferCopyRegions.size(), bufferCopyRegions.data());
 
@@ -1062,7 +1245,7 @@ void MainEngine::save_cubemap(const char* path)
 
 	for (uint32_t face = 0; face < 6; face++) {
 		std::string facePath = directory + "\\" + "cubemap_face_" + std::to_string(face) + ".hdr";;
-		stbi_write_hdr(facePath.c_str(), 1024, 1024, 4, imageData + (1024 * 1024 * 4 * face));
+		stbi_write_hdr(facePath.c_str(), _cubemapResolution, _cubemapResolution, 4, imageData + (_cubemapResolution * _cubemapResolution * 4 * face));
 		fmt::print("Saved face {} to: {}\n", face, facePath);
 	}
 
@@ -1074,19 +1257,29 @@ void MainEngine::cleanup() {
 	fmt::print("================================================================================\n");
 	fmt::print("Cleaning up\n");
 	auto start = std::chrono::system_clock::now();
-
 	SDL_SetRelativeMouseMode(SDL_FALSE);
-
 	vkDeviceWaitIdle(_device);
 
 	_mainDeletionQueue.flush();
 
-	destroy_image(_cubemapImage);
+
+	vkDestroyDescriptorSetLayout(_device, bufferAddressesDescriptorSetLayout, nullptr);
+	vkDestroyDescriptorSetLayout(_device, sceneDataDescriptorSetLayout, nullptr);
+	vkDestroyDescriptorSetLayout(_device, textureDescriptorSetLayout, nullptr);
+
+	destroy_buffer(_sceneDataBuffer);
+	_sceneDataDescriptorBuffer.destroy(_device, _allocator);
+
+	// Default Data
+	destroy_image(_equiImage);
 	destroy_image(splitCubemapImage);
 
-
+	// IMGUI
 	ImGui_ImplVulkan_Shutdown();
 	vkDestroyDescriptorPool(_device, imguiPool, nullptr);
+
+	// Draw Structures
+	_metallicSpheres->destroy(_device, _allocator);
 
 
 	for (int i = 0; i < FRAME_OVERLAP; i++) {
@@ -1136,7 +1329,7 @@ void MainEngine::immediate_submit(std::function<void(VkCommandBuffer cmd)>&& fun
 
 	VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submitInfo, _immFence));
 
-	VK_CHECK(vkWaitForFences(_device, 1, &_immFence, true, 100000000000));
+	VK_CHECK(vkWaitForFences(_device, 1, &_immFence, true, 1000000000000));
 }
 
 
@@ -1298,6 +1491,33 @@ void MainEngine::destroy_buffer(const AllocatedBuffer& buffer)
 }
 #pragma endregion
 
+
+
+void MainEngine::resize_swapchain() {
+	vkDeviceWaitIdle(_device);
+
+	destroy_swapchain();
+	destroy_draw_iamges();
+	int w, h;
+	// get new window size
+	SDL_GetWindowSize(_window, &w, &h);
+	_windowExtent.width = w;
+	_windowExtent.height = h;
+
+	fmt::print("New Screen Resolution: {}x{}\n", w, h);
+	// will always be one
+	_maxRenderScale = std::min(
+		(float)_drawImage.imageExtent.width / (float)_windowExtent.width
+		, (float)_drawImage.imageExtent.height / (float)_windowExtent.height
+	);
+	_maxRenderScale = std::max(_maxRenderScale, 1.0f);
+	_maxRenderScale = 1.0f;
+	_renderScale = std::min(_maxRenderScale, _renderScale);
+	create_swapchain(_windowExtent.width, _windowExtent.height);
+	create_draw_images(_windowExtent.width, _windowExtent.height);
+
+	resize_requested = false;
+}
 
 std::string MainEngine::getParentFolder(const std::string& filePath) {
 	std::filesystem::path path(filePath);

@@ -63,7 +63,7 @@ public:
 
 	VkExtent2D _windowExtent{ 1700 , 900 };
 	struct SDL_Window* _window{ nullptr };
-
+	bool resize_requested{ false };
 
 	int _frameNumber{ 0 };
 	float frameTime{ 0.0f };
@@ -112,12 +112,13 @@ public:
 	// Application Data
 	std::string _equirectangularPath;
 	std::string _cubemapSavePath;
-	bool _flipY{ true };
+	bool _flipY{ false };
 	bool _customOutputPath{ false };
 	
 	std::string _cubemapImagePath{};
-	AllocatedImage _cubemapImage; // equi image
+	AllocatedImage _equiImage; // equi image
 	AllocatedImage splitCubemapImage; // cubemap image
+	uint32_t _cubemapResolution{ 1024 };
 
 #pragma region Images
 	AllocatedImage create_image(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
@@ -132,6 +133,7 @@ public:
 	void copy_buffer(AllocatedBuffer src, AllocatedBuffer dst, VkDeviceSize size);
 	VkDeviceAddress get_buffer_address(AllocatedBuffer buffer);
 	void destroy_buffer(const AllocatedBuffer& buffer);
+	void resize_swapchain();
 	std::string getParentFolder(const std::string& filePath);
 #pragma endregion
 
@@ -142,14 +144,19 @@ public:
 	VkPipelineLayout _cubemapPipelineLayout;
 	VkPipeline _cubemapPipeline;
 
-	VkPipelineLayout _environmentMapPipelineLayout;
-	VkPipeline _environmentMapPipeline;
+	VkPipelineLayout _environmentPipelineLayout;
+	ShaderObject _environmentPipeline;
 	
-	VkDescriptorSetLayout _cubemapDescriptorSetLayout;
-	DescriptorBufferSampler _cubemapDescriptorBuffer;
+
 	VkDescriptorSetLayout _equiImageDescriptorSetLayout;
 	DescriptorBufferSampler _equiImageDescriptorBuffer;
+	VkDescriptorSetLayout _cubemapStorageDescriptorSetLayout;
+	DescriptorBufferSampler _cubemapStorageDescriptorBuffer;
+	VkDescriptorSetLayout _cubemapDescriptorSetLayout;
+	DescriptorBufferSampler _cubemapDescriptorBuffer;
 
+	AllocatedBuffer _sceneDataBuffer;
+	DescriptorBufferUniform _sceneDataDescriptorBuffer;
 
 	VkDescriptorSetLayout bufferAddressesDescriptorSetLayout;
 	VkDescriptorSetLayout sceneDataDescriptorSetLayout;
@@ -173,7 +180,8 @@ private:
 	void layout_imgui();
 	void draw_imgui(VkCommandBuffer cmd, VkImageView targetImageView);
 
-	void draw_fullscreen(VkCommandBuffer cmd, AllocatedImage sourceImage, AllocatedImage targetImage);
+	void draw_fullscreen(VkCommandBuffer cmd, AllocatedImage targetImage);
+	void draw_environment(VkCommandBuffer cmd, AllocatedImage tagetImage, AllocatedImage depthImage);
 
 	void init_pipelines();
 

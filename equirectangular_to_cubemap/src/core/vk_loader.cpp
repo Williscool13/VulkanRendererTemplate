@@ -516,5 +516,5 @@ void LoadedGLTFMultiDraw::clearAll()
 		vkDestroySampler(dv, sampler, nullptr);
 	}
 
-	fmt::print("Destroying Loaded GLTF Multi Draw Struct");
+	fmt::print("Destroying Loaded GLTF Multi Draw Struct\n");
 }

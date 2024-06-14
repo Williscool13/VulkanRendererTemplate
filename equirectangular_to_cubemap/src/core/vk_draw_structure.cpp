@@ -5,7 +5,10 @@ bool GLTFMetallic_RoughnessMultiDraw::hasTransparents() const { return transpare
 
 bool GLTFMetallic_RoughnessMultiDraw::hasOpaques() const { return opaqueDrawBuffers.instanceCount > 0; }
 
-void GLTFMetallic_RoughnessMultiDraw::build_pipelines(MainEngine* engine, bool use_msaa, VkSampleCountFlagBits sample_count)
+void GLTFMetallic_RoughnessMultiDraw::build_pipelines(
+	MainEngine* engine, bool use_msaa, VkSampleCountFlagBits sample_count
+	,const char* vertShaderPath, const char* fragShaderPath
+)
 {
 	buffer_addresses = DescriptorBufferUniform(engine->_instance, engine->_device
 		, engine->_physicalDevice, engine->_allocator, engine->bufferAddressesDescriptorSetLayout, 1);
@@ -51,7 +54,7 @@ void GLTFMetallic_RoughnessMultiDraw::build_pipelines(MainEngine* engine, bool u
 
 
 	vkutil::create_shader_objects(
-		"shaders/meshIndirect.vert.spv", "shaders/meshIndirect.frag.spv"
+		vertShaderPath, fragShaderPath
 		, engine->_device, shaderObject->_shaders
 		, 3, layouts
 		, 0, nullptr
@@ -274,8 +277,8 @@ void GLTFMetallic_RoughnessMultiDraw::build_buffers(MainEngine* engine, LoadedGL
 		texture_data.setup_data(engine->_device, texture_descriptors);
 
 		// SCENE DATA
-		sceneDataBuffer = engine->create_buffer(sizeof(GPUSceneDataMultiDraw), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-		scene_data.setup_data(engine->_device, sceneDataBuffer, sizeof(GPUSceneDataMultiDraw));
+		sceneDataBuffer = engine->create_buffer(sizeof(SceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		scene_data.setup_data(engine->_device, sceneDataBuffer, sizeof(SceneData));
 	}
 
 	// Indirect Draw Buffer Addresses (Binding 3)
@@ -350,6 +353,8 @@ void GLTFMetallic_RoughnessMultiDraw::update_model_matrix(LoadedGLTFMultiDraw& s
 
 void GLTFMetallic_RoughnessMultiDraw::cull(VkCommandBuffer cmd, VkPipeline pipeline, VkPipelineLayout pipelineLayout)
 {
+	fmt::print("This function is not supported in this application.\n");
+	abort();
 	// GPU Frustum Culling
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 	VkDescriptorBufferBindingInfoEXT compute_culling_binding_info[3]{};
