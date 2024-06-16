@@ -53,9 +53,12 @@ void MainEngine::init() {
 
 	_metallicSpheres = std::make_shared<GLTFMetallic_RoughnessMultiDraw>();
 	std::string structurePath = { "src_assets\\MetalRoughSpheres.glb" };
-	auto metalRoughSpheres = loadGltfMultiDraw(this, structurePath);
+	//std::string structurePath = { "src_assets\\primitives.gltf" };
+	/*auto metalRoughSpheres = loadGltfMultiDraw(this, structurePath); */
 	_metallicSpheres->build_pipelines(this, USE_MSAA, MSAA_SAMPLES, "shaders\\pbrshader.vert.spv", "shaders\\pbrshader.frag.spv");
-	_metallicSpheres->build_buffers(this, *metalRoughSpheres.value().get());
+	_metallicSpheres->load_gltf(this, structurePath);
+	_metallicSpheres->build_buffers(this);
+	
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 	fmt::print("Finished Initialization in {} seconds\n", elapsed.count() / 1000000.0f);
@@ -104,6 +107,7 @@ void MainEngine::draw()
 {
 	auto start = std::chrono::system_clock::now();
 
+	update_scene_data();
 
 	// GPU -> CPU sync (fence)
 	VK_CHECK(vkWaitForFences(_device, 1, &get_current_frame()._renderFence, true, 1000000000));
@@ -211,8 +215,6 @@ void MainEngine::draw_fullscreen(VkCommandBuffer cmd, AllocatedImage targetImage
 }
 
 void MainEngine::draw_environment(VkCommandBuffer cmd, AllocatedImage drawImage, AllocatedImage depthImage) {
-	//VkRenderingAttachmentInfo colorAttachment = vkinit::attachment_info(drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	//VkRenderingInfo renderInfo = vkinit::rendering_info(_drawExtent, &colorAttachment, nullptr);
 	VkRenderingAttachmentInfo depthAttachment;
 	VkRenderingAttachmentInfo colorAttachment;
 	if (USE_MSAA) {
@@ -246,48 +248,26 @@ void MainEngine::draw_environment(VkCommandBuffer cmd, AllocatedImage drawImage,
 	_environmentPipeline.bind_shaders(cmd);
 	_environmentPipeline.bind_rasterizaer_discard(cmd, VK_FALSE);
 
-	{
-		SceneData sceneData = {};
-		float time = SDL_GetTicks64() / 1000.0f;
-		float angle = time / 10.0f * glm::radians(90.0f);
-
-		glm::mat4 rot = glm::rotate(glm::mat4(1.0f), angle, glm::vec3(0.0f, 1.0f, 0.0f));
-		glm::mat4 tra = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 5.0f));
-
-		glm::vec4 target = rot * tra * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-
-		glm::mat4 _view = glm::lookAt(glm::vec3(0.0f), glm::vec3(target), glm::vec3(0.0f, 1.0f, 0.0f));
-		sceneData.view = _view;
-		//sceneData.view = glm::lookAt(glm::vec3(0.0f), glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-		float aspect = static_cast<float>(_drawExtent.width) / static_cast<float>(_drawExtent.height);
-		sceneData.proj = glm::perspective(glm::radians(60.0f), aspect, 0.1f, 100.0f);
-		sceneData.viewproj = sceneData.proj * sceneData.view;
-		sceneData.ambientColor = glm::vec4(0.1f, 0.1f, 0.1f, 1.0f);
-		sceneData.sunlightDirection = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
-		sceneData.sunlightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-		sceneData.cameraPosition = glm::vec4(0.0f);
-
-		SceneData* p_scene_data = (SceneData*)_sceneDataBuffer.info.pMappedData;
-		memcpy(p_scene_data, &sceneData, sizeof(SceneData));
-	}
 	VkDescriptorBufferBindingInfoEXT bindings[2] = {
+		_sceneDataDescriptorBuffer.get_descriptor_buffer_binding_info(),
 		_cubemapDescriptorBuffer.get_descriptor_buffer_binding_info(),
-		_sceneDataDescriptorBuffer.get_descriptor_buffer_binding_info()
 	};
 	
 	vkCmdBindDescriptorBuffersEXT(cmd, 2, bindings);
 
-	constexpr uint32_t image_buffer_index = 0;
-	constexpr uint32_t scene_data_index = 1;
+	constexpr uint32_t scene_data_index = 0;
+	constexpr uint32_t image_buffer_index = 1;
 	VkDeviceSize buffer_offset = 0;
 	vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _environmentPipelineLayout
-		, 0, 1, &image_buffer_index, &buffer_offset);
+		, 0, 1, &scene_data_index, &buffer_offset);
 	vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _environmentPipelineLayout
-		, 1, 1, &scene_data_index, &buffer_offset);
-
-
+		, 1, 1, &image_buffer_index, &buffer_offset);
+	
 
 	vkCmdDraw(cmd, 3, 1, 0, 0);
+
+	_metallicSpheres->draw(cmd, _drawExtent);
+
 	vkCmdEndRendering(cmd);
 
 }
@@ -684,10 +664,10 @@ void MainEngine::init_pipelines()
 			, nullptr, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
 	}
 
-	_sceneDataBuffer = create_buffer(sizeof(SceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	_sceneDataBuffer = create_buffer(sizeof(CubemapSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	_sceneDataDescriptorBuffer = DescriptorBufferUniform(_instance, _device
 			, _physicalDevice, _allocator, sceneDataDescriptorSetLayout, 1);
-	_sceneDataDescriptorBuffer.setup_data(_device, _sceneDataBuffer, sizeof(SceneData));
+	_sceneDataDescriptorBuffer.setup_data(_device, _sceneDataBuffer, sizeof(CubemapSceneData));
 
 
 	// Fullscreen Background Pipeline
@@ -787,7 +767,7 @@ void MainEngine::init_pipelines()
 	// Environment Map Background
 	{
 		VkDescriptorSetLayout layouts[2] = 
-		{ _cubemapDescriptorSetLayout, sceneDataDescriptorSetLayout };
+		{ sceneDataDescriptorSetLayout, _cubemapDescriptorSetLayout };
 
 		VkPipelineLayoutCreateInfo layout_info = vkinit::pipeline_layout_create_info();
 		layout_info.setLayoutCount = 2;
@@ -805,7 +785,7 @@ void MainEngine::init_pipelines()
 		else _environmentPipeline.disable_multisampling();
 
 		_environmentPipeline.init_blending(ShaderObject::BlendMode::NO_BLEND);
-		_environmentPipeline.enable_depthtesting(true, VK_COMPARE_OP_LESS_OR_EQUAL);
+		_environmentPipeline.enable_depthtesting(false, VK_COMPARE_OP_LESS_OR_EQUAL);
 
 		_environmentPipeline._stages[0] = VK_SHADER_STAGE_VERTEX_BIT;
 		_environmentPipeline._stages[1] = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -955,6 +935,44 @@ void MainEngine::init_pipelines()
 		_cubemapDescriptorBuffer.setup_data(_device, combined_descriptor);
 
 	}
+}
+
+void MainEngine::update_scene_data()
+{
+	float time = SDL_GetTicks64() / 1000.0f;
+	float angle = time / 10.0f * glm::radians(90.0f);
+	float aspect = static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height);
+
+	glm::mat4 rot = glm::rotate(glm::mat4(1.0f), angle, glm::vec3(0.0f, 1.0f, 0.0f));
+	glm::mat4 tra = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 10.0f));
+	glm::vec4 camera_position = rot * tra * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+	glm::vec4 camera_view_direction = glm::normalize(glm::vec4(0.0f) - camera_position);
+	glm::mat4 projection = glm::perspective(glm::radians(60.0f), aspect, 0.1f, 1000.0f);
+
+
+	CubemapSceneData environmentMapSceneData{};
+	environmentMapSceneData.view = glm::lookAt(glm::vec3(0.0f), glm::vec3(camera_view_direction), glm::vec3(0.0f, 1.0f, 0.0f));
+	environmentMapSceneData.proj = projection;
+	environmentMapSceneData.viewproj = environmentMapSceneData.proj * environmentMapSceneData.view;
+
+	CubemapSceneData* p_scene_data = (CubemapSceneData*)_sceneDataBuffer.info.pMappedData;
+	memcpy(p_scene_data, &environmentMapSceneData, sizeof(CubemapSceneData));
+	
+
+	SceneData sceneData = {};
+	sceneData.view = glm::lookAt(glm::vec3(camera_position), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	sceneData.proj = projection;
+	sceneData.proj[1][1] *= -1; // invert Y
+	sceneData.viewproj = sceneData.proj * sceneData.view;
+	sceneData.ambientColor = glm::vec4(.1f);
+	sceneData.sunlightColor = glm::vec4(1.0f, 1.0f, 1.0f, 2.0f);
+	sceneData.sunlightDirection = glm::vec4(0, 1, 0.5f, 1.f); // inverted to match openGL up/down
+	sceneData.cameraPosition = glm::vec4(camera_position);
+
+	glm::mat4 object_model = glm::mat4(1.0f);
+	_metallicSpheres->update_draw_data(sceneData, object_model);
+	// TODO: notice how this has to update scendata for each object, need to make this unifired buffer between all objects
+
 }
 
 

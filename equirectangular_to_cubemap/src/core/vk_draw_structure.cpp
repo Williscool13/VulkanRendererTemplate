@@ -45,7 +45,8 @@ void GLTFMetallic_RoughnessMultiDraw::build_pipelines(
 		shaderObject->disable_multisampling();
 	}
 	shaderObject->init_blending(ShaderObject::BlendMode::NO_BLEND);
-	shaderObject->enable_depthtesting(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+	//shaderObject->enable_depthtesting(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+	shaderObject->enable_depthtesting(true, VK_COMPARE_OP_LESS_OR_EQUAL);
 
 
 	shaderObject->_stages[0] = VK_SHADER_STAGE_VERTEX_BIT;
@@ -61,10 +62,26 @@ void GLTFMetallic_RoughnessMultiDraw::build_pipelines(
 	);
 }
 
-void GLTFMetallic_RoughnessMultiDraw::build_buffers(MainEngine* engine, LoadedGLTFMultiDraw& scene)
+
+void GLTFMetallic_RoughnessMultiDraw::load_gltf(MainEngine* engine, std::string& pathToScene)
+{
+	auto _scene = loadGltfMultiDraw(engine, pathToScene);
+	if (_scene == nullptr) {
+		fmt::print("Failed to load GLTF file\n");
+		return;
+	}
+	else {
+		fmt::print("Loaded GLTF model at path: {}\n", pathToScene);
+	}
+	scene_ptr = *_scene;
+}
+
+void GLTFMetallic_RoughnessMultiDraw::build_buffers(MainEngine* engine)
 {
 	if (buffersBuilt) { return; }
 	buffersBuilt = true;
+
+	LoadedGLTFMultiDraw& scene = *this->scene_ptr;
 
 	size_t vertexOffset{ 0 };
 	std::vector<MultiDrawVertex> allVertices;
@@ -95,7 +112,7 @@ void GLTFMetallic_RoughnessMultiDraw::build_buffers(MainEngine* engine, LoadedGL
 	for (auto& n : scene.topNodes) {
 		recursive_node_process(scene, *n.get(), mMatrix);
 	}
-	glm::mat4 duplMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(200, 0, 0));
+	/*glm::mat4 duplMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(200, 0, 0));
 	for (auto& n : scene.topNodes) {
 		recursive_node_process(scene, *n.get(), duplMatrix);
 	}
@@ -126,7 +143,7 @@ void GLTFMetallic_RoughnessMultiDraw::build_buffers(MainEngine* engine, LoadedGL
 	duplMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(-225, 0, -225));
 	for (auto& n : scene.topNodes) {
 		recursive_node_process(scene, *n.get(), duplMatrix);
-	}
+	}*/
 
 	// Vertex Data (Per Sub-Mesh), Index Data (Per Instance), Instance Data (Per Instance), Material Data (Per Material)
 	{
@@ -339,17 +356,25 @@ void GLTFMetallic_RoughnessMultiDraw::recursive_node_process_instance_data(Loade
 	}
 }
 
-void GLTFMetallic_RoughnessMultiDraw::update_model_matrix(LoadedGLTFMultiDraw& scene, glm::mat4& topMatrix)
+void GLTFMetallic_RoughnessMultiDraw::update_draw_data(SceneData& sceneData, glm::mat4& model_matrix)
 {
+	SceneData* multiDrawSceneUniformData = (SceneData*)sceneDataBuffer.info.pMappedData;
+	memcpy(multiDrawSceneUniformData, &sceneData, sizeof(SceneData));
+
+	update_model_matrix(model_matrix);
+}
+
+void GLTFMetallic_RoughnessMultiDraw::update_model_matrix(glm::mat4& topMatrix)
+{
+	LoadedGLTFMultiDraw& scene = *this->scene_ptr;
 	int current_model_index{ 0 };
 	for (auto& n : scene.topNodes) {
 		recursive_node_process_instance_data(scene, *n.get(), topMatrix, current_model_index);
 	}
 
 	memcpy(instanceBuffer.info.pMappedData, instanceData.data(), instanceData.size() * sizeof(InstanceData));
-	// copy data to buffer
-
 }
+
 
 void GLTFMetallic_RoughnessMultiDraw::cull(VkCommandBuffer cmd, VkPipeline pipeline, VkPipelineLayout pipelineLayout)
 {
@@ -403,7 +428,7 @@ void GLTFMetallic_RoughnessMultiDraw::draw(VkCommandBuffer cmd, VkExtent2D drawE
 
 	// Opaque Rendering
 	if (opaqueDrawBuffers.instanceCount > 0) {
-		shaderObject->enable_depthtesting(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+		shaderObject->enable_depthtesting(true, VK_COMPARE_OP_LESS_OR_EQUAL);
 		shaderObject->init_blending(ShaderObject::BlendMode::NO_BLEND);
 		shaderObject->bind_depth_test(cmd);
 		shaderObject->bind_blending(cmd);
@@ -414,7 +439,7 @@ void GLTFMetallic_RoughnessMultiDraw::draw(VkCommandBuffer cmd, VkExtent2D drawE
 
 	// Transparent Rendering
 	if (transparentDrawBuffers.instanceCount > 0) {
-		shaderObject->enable_depthtesting(false, VK_COMPARE_OP_GREATER_OR_EQUAL);
+		shaderObject->enable_depthtesting(false, VK_COMPARE_OP_LESS_OR_EQUAL);
 		shaderObject->init_blending(ShaderObject::BlendMode::ADDITIVE_BLEND);
 		shaderObject->bind_depth_test(cmd);
 		shaderObject->bind_blending(cmd);
@@ -448,4 +473,7 @@ void GLTFMetallic_RoughnessMultiDraw::destroy(VkDevice device, VmaAllocator allo
 	vkDestroyShaderEXT(device, shaderObject->_shaders[0], nullptr);
 	vkDestroyShaderEXT(device, shaderObject->_shaders[1], nullptr);
 
+	scene_ptr.reset();
+
+	fmt::print("Destroyed GLTFMetallic_RoughnessMultiDraw\n");
 }

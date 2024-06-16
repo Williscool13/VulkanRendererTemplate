@@ -20,6 +20,8 @@ struct GLTFMetallic_RoughnessMultiDraw {
 	bool hasTransparents() const;
 	bool hasOpaques() const;
 
+	std::shared_ptr<LoadedGLTFMultiDraw> scene_ptr;
+
 	std::shared_ptr<ShaderObject> shaderObject;
 	// holds indirect draw buffers. Transparent will not go through compute culling.
 
@@ -43,7 +45,7 @@ struct GLTFMetallic_RoughnessMultiDraw {
 	//	when initializing, set descriptor count to be equal to the number of textures
 	DescriptorBufferSampler texture_data;
 
-	// BINDING 3: INDIRECT DRAW BUFFER
+	// BINDING 2 (Compute): INDIRECT DRAW BUFFER
 	DescriptorBufferUniform compute_culling_data_buffer_address;
 	AllocatedBuffer indirect_draw_buffer_underlying;
 	MultiDrawBuffers opaqueDrawBuffers;
@@ -61,10 +63,13 @@ struct GLTFMetallic_RoughnessMultiDraw {
 	// store offsets of vertices
 	std::vector<uint32_t> vertexOffsets;
 
-	void build_buffers(MainEngine* engine, LoadedGLTFMultiDraw& scene);
+	void load_gltf(MainEngine* engine, std::string& pathToScene);
+
+	void build_buffers(MainEngine* engine);
 	void recursive_node_process(LoadedGLTFMultiDraw& scene, Node& node, glm::mat4& topMatrix);
 	void recursive_node_process_instance_data(LoadedGLTFMultiDraw& scene, Node& node, glm::mat4& topMatrix, int& current_model_index);
-	void update_model_matrix(LoadedGLTFMultiDraw& scene, glm::mat4& topMatrix);
+	void update_draw_data(SceneData& sceneData, glm::mat4& model_matrix);
+	void update_model_matrix(glm::mat4& topMatrix);
 
 	bool buffersBuilt{ false };
 

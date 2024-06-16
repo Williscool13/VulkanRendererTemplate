@@ -173,6 +173,9 @@
     <None Include="shaders\equitoface.comp" />
     <None Include="shaders\fullscreen.frag" />
     <None Include="shaders\fullscreen.vert" />
+    <None Include="shaders\include\indirect_input_structures.glsl" />
+    <None Include="shaders\pbrshader.frag" />
+    <None Include="shaders\pbrshader.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

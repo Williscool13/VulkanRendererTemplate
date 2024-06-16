@@ -185,6 +185,8 @@ private:
 
 	void init_pipelines();
 
+	void update_scene_data();
+
 
 	void create_swapchain(uint32_t width, uint32_t height);
 	void create_draw_images(uint32_t width, uint32_t height);

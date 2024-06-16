@@ -31,6 +31,9 @@
     <Filter Include="Shaders">
       <UniqueIdentifier>{384d6939-95e7-4d50-a2f7-7f0921ab842a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shaders\Include">
+      <UniqueIdentifier>{a9f872b9-a158-4ab3-93c3-f0ff1ce7acac}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="include\imgui\imgui_draw.cpp">
@@ -124,6 +127,15 @@
     </None>
     <None Include="shaders\environment.vert">
       <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\pbrshader.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\pbrshader.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\include\indirect_input_structures.glsl">
+      <Filter>Shaders\Include</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

@@ -73,6 +73,12 @@ struct BoundingSphere {
 };
 
 
+struct CubemapSceneData {
+	glm::mat4 view;
+	glm::mat4 proj;
+	glm::mat4 viewproj;
+};
+
 struct SceneData {
 	glm::mat4 view;
 	glm::mat4 proj;
