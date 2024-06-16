@@ -137,6 +137,9 @@
     <None Include="shaders\include\indirect_input_structures.glsl">
       <Filter>Shaders\Include</Filter>
     </None>
+    <None Include="shaders\cubetodiffspec.comp">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\core\vk_types.h">

@@ -168,6 +168,7 @@
     <ClInclude Include="src\core\vk_types.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="shaders\cubetodiffspec.comp" />
     <None Include="shaders\environment.frag" />
     <None Include="shaders\environment.vert" />
     <None Include="shaders\equitoface.comp" />

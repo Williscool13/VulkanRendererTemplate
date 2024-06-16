@@ -44,8 +44,15 @@ struct FrameData {
 	DeletionQueue _deletionQueue;
 };
 
-struct PushConstantData {
+struct EquiToCubePushConstantData {
 	bool flipY;
+	float pad;
+	float pad2;
+	float pad3;
+};
+
+struct CubeToDiffusePushConstantData {
+	float sampleDelta;
 	float pad;
 	float pad2;
 	float pad3;
@@ -118,6 +125,8 @@ public:
 	std::string _cubemapImagePath{};
 	AllocatedImage _equiImage; // equi image
 	AllocatedImage splitCubemapImage; // cubemap image
+	AllocatedImage _diffuseIrradianceImage; // irradiance image
+	//AllocatedImage _prefilteredSpecularImage; // prefiltered image
 	uint32_t _cubemapResolution{ 1024 };
 
 #pragma region Images
@@ -141,22 +150,30 @@ public:
 	VkPipelineLayout _fullscreenPipelineLayout;
 	ShaderObject _fullscreenPipeline;
 
+	// equi to cubemap pipeline
 	VkPipelineLayout _cubemapPipelineLayout;
 	VkPipeline _cubemapPipeline;
+
+	// cubemap to diffuse irradiance and prefiltered specular pipeline
+	VkPipelineLayout _diffuseIrradiancePipelineLayout;
+	VkPipeline _diffuseIrradiancePipeline;
 
 	VkPipelineLayout _environmentPipelineLayout;
 	ShaderObject _environmentPipeline;
 	
 
+	// 0 is equi image
 	VkDescriptorSetLayout _equiImageDescriptorSetLayout;
 	DescriptorBufferSampler _equiImageDescriptorBuffer;
+	// [STORAGE] 0 is raw cubemap, 1 is irradiance, 2 is prefiltered
 	VkDescriptorSetLayout _cubemapStorageDescriptorSetLayout;
 	DescriptorBufferSampler _cubemapStorageDescriptorBuffer;
+	// [SAMPLED] 0 is raw cubemap, 1 is irradiance, 2 is prefiltered
 	VkDescriptorSetLayout _cubemapDescriptorSetLayout;
 	DescriptorBufferSampler _cubemapDescriptorBuffer;
 
-	AllocatedBuffer _sceneDataBuffer;
-	DescriptorBufferUniform _sceneDataDescriptorBuffer;
+	AllocatedBuffer _environmentMapSceneDataBuffer;
+	DescriptorBufferUniform _environmentMapSceneDataDescriptorBuffer;
 
 	VkDescriptorSetLayout bufferAddressesDescriptorSetLayout;
 	VkDescriptorSetLayout sceneDataDescriptorSetLayout;
@@ -196,5 +213,6 @@ private:
 	bool load_equirectangular_image(const char* path);
 	void create_cubemap_from_equirectangular();
 	void save_cubemap(const char* path);
+	void save_diffuse_irradiance(const char* path);
 };
 
