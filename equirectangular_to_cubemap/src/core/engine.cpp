@@ -58,7 +58,7 @@ void MainEngine::init() {
 	_metallicSpheres->build_pipelines(this, USE_MSAA, MSAA_SAMPLES, "shaders\\pbrshader.vert.spv", "shaders\\pbrshader.frag.spv");
 	_metallicSpheres->load_gltf(this, structurePath);
 	_metallicSpheres->build_buffers(this);
-	
+
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 	fmt::print("Finished Initialization in {} seconds\n", elapsed.count() / 1000000.0f);
@@ -134,8 +134,15 @@ void MainEngine::draw()
 	VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
 
 	vkutil::transition_image(cmd, _drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	//draw_fullscreen(cmd, _drawImage);
-	draw_environment(cmd, _drawImage, _depthImage);
+	switch (currentRenderView) {
+	case 0:
+		draw_fullscreen(cmd);
+		break;
+	case 1:
+		draw_environment(cmd);
+		break;
+
+	}
 
 	vkutil::transition_image(cmd, _drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 	vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -183,11 +190,32 @@ void MainEngine::draw()
 	drawTime = elapsed2.count() / 1000.0f;
 }
 
-void MainEngine::draw_fullscreen(VkCommandBuffer cmd, AllocatedImage targetImage)
+void MainEngine::draw_fullscreen(VkCommandBuffer cmd)
 {
+	VkRenderingAttachmentInfo depthAttachment;
 	VkRenderingAttachmentInfo colorAttachment;
-	colorAttachment = vkinit::attachment_info(targetImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	VkRenderingInfo renderInfo = vkinit::rendering_info(_drawExtent, &colorAttachment, nullptr);
+	if (USE_MSAA) {
+		VkClearValue colorClearValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+		colorAttachment = vkinit::attachment_info(_drawImageBeforeMSAA.imageView, &colorClearValue, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		colorAttachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+		colorAttachment.resolveImageView = _drawImage.imageView;
+		colorAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		VkClearValue depthClearValue = { 1.0f, 0 };
+		depthAttachment = vkinit::attachment_info(_depthImage.imageView, &depthClearValue, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+		depthAttachment.resolveMode = VK_RESOLVE_MODE_NONE;
+	}
+	else {
+		VkClearValue colorClearValue = { 0.0f, 0.0f, 0.0f, 0.0f };
+		colorAttachment = vkinit::attachment_info(_drawImage.imageView, &colorClearValue, VK_IMAGE_LAYOUT_GENERAL);
+		VkClearValue depthClearValue = { 1.0f, 0 };
+		depthAttachment = vkinit::attachment_info(_depthImage.imageView, &depthClearValue, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+	}
+	VkRenderingInfo renderInfo = vkinit::rendering_info(_drawExtent, &colorAttachment, &depthAttachment);
+
+
+	//VkRenderingAttachmentInfo colorAttachment;
+	//colorAttachment = vkinit::attachment_info(targetImage.imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	//VkRenderingInfo renderInfo = vkinit::rendering_info(_drawExtent, &colorAttachment, nullptr);
 	vkCmdBeginRendering(cmd, &renderInfo);
 
 	_fullscreenPipeline.bind_viewport(cmd, static_cast<float>(_drawExtent.width), static_cast<float>(_drawExtent.height), 0.0f, 1.0f);
@@ -214,7 +242,7 @@ void MainEngine::draw_fullscreen(VkCommandBuffer cmd, AllocatedImage targetImage
 	vkCmdEndRendering(cmd);
 }
 
-void MainEngine::draw_environment(VkCommandBuffer cmd, AllocatedImage drawImage, AllocatedImage depthImage) {
+void MainEngine::draw_environment(VkCommandBuffer cmd) {
 	VkRenderingAttachmentInfo depthAttachment;
 	VkRenderingAttachmentInfo colorAttachment;
 	if (USE_MSAA) {
@@ -252,17 +280,18 @@ void MainEngine::draw_environment(VkCommandBuffer cmd, AllocatedImage drawImage,
 		_environmentMapSceneDataDescriptorBuffer.get_descriptor_buffer_binding_info(),
 		_cubemapDescriptorBuffer.get_descriptor_buffer_binding_info(),
 	};
-	
+
 	vkCmdBindDescriptorBuffersEXT(cmd, 2, bindings);
 
 	constexpr uint32_t scene_data_index = 0;
 	constexpr uint32_t image_buffer_index = 1;
 	VkDeviceSize buffer_offset = 0;
+	VkDeviceSize image_buffer_offset = _cubemapDescriptorBuffer.descriptor_buffer_size * environmentMapType;
 	vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _environmentPipelineLayout
 		, 0, 1, &scene_data_index, &buffer_offset);
 	vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _environmentPipelineLayout
-		, 1, 1, &image_buffer_index, &buffer_offset);
-	
+		, 1, 1, &image_buffer_index, &image_buffer_offset);
+
 
 	vkCmdDraw(cmd, 3, 1, 0, 0);
 
@@ -471,13 +500,13 @@ void MainEngine::layout_imgui()
 
 	if (ImGui::Begin("Main")) {
 		const char* items[] = { "Equirectangular Fullscreen", "Environment Cubemap" };
-		static int current_render_view = 0;
 
-		if (ImGui::BeginCombo("Render View", items[current_render_view], 0)) {
+
+		if (ImGui::BeginCombo("Render View", items[currentRenderView], 0)) {
 			for (int i = 0; i < std::size(items); i++) {
-				bool is_selected = (current_render_view == i);
+				bool is_selected = (currentRenderView == i);
 				if (ImGui::Selectable(items[i], is_selected)) {
-					current_render_view = i;
+					currentRenderView = i;
 				}
 				if (is_selected) {
 					ImGui::SetItemDefaultFocus();
@@ -485,12 +514,16 @@ void MainEngine::layout_imgui()
 			}
 			ImGui::EndCombo();
 		}
+		if (currentRenderView == 1) {
+			ImGui::SliderInt("Environment Map Type", &environmentMapType, 0, 1);
+		}
 
 
 
 		if (ImGui::CollapsingHeader("Load Cubemap (From Equirectangular Image)")) {
 			ImGui::InputText("Path to Equirecangular Image", &_equirectangularPath);
 			ImGui::Checkbox("Flip Y", &_flipY);
+			ImGui::SliderFloat("Diffuse Irradiance Sample Delta", &_sampleDelta, 0.005f, 0.5f);
 
 			if (ImGui::Button("Load Image")) {
 				if (load_equirectangular_image(_equirectangularPath.data())) {
@@ -693,7 +726,7 @@ void MainEngine::init_pipelines()
 
 	_environmentMapSceneDataBuffer = create_buffer(sizeof(CubemapSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	_environmentMapSceneDataDescriptorBuffer = DescriptorBufferUniform(_instance, _device
-			, _physicalDevice, _allocator, sceneDataDescriptorSetLayout, 1);
+		, _physicalDevice, _allocator, sceneDataDescriptorSetLayout, 1);
 	_environmentMapSceneDataDescriptorBuffer.setup_data(_device, _environmentMapSceneDataBuffer, sizeof(CubemapSceneData));
 
 
@@ -837,7 +870,7 @@ void MainEngine::init_pipelines()
 
 	// Environment Map Background
 	{
-		VkDescriptorSetLayout layouts[2] = 
+		VkDescriptorSetLayout layouts[2] =
 		{ sceneDataDescriptorSetLayout, _cubemapDescriptorSetLayout };
 
 		VkPipelineLayoutCreateInfo layout_info = vkinit::pipeline_layout_create_info();
@@ -921,7 +954,7 @@ void MainEngine::init_pipelines()
 				VK_FORMAT_R32G32B32A32_SFLOAT
 				, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT
 				, { _cubemapResolution,_cubemapResolution, 1 });
-			
+
 			// always allocate images on dedicated GPU memory
 			VmaAllocationCreateInfo allocinfo = {};
 			allocinfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
@@ -929,7 +962,7 @@ void MainEngine::init_pipelines()
 			VK_CHECK(vmaCreateImage(_allocator, &img_info, &allocinfo, &newImage.image, &newImage.allocation, nullptr));
 
 			VkImageViewCreateInfo view_info = vkinit::cubemapview_create_info(VK_FORMAT_R32G32B32A32_SFLOAT, newImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
-			
+
 
 			VK_CHECK(vkCreateImageView(_device, &view_info, nullptr, &newImage.imageView));
 
@@ -992,6 +1025,7 @@ void MainEngine::init_pipelines()
 
 		}
 
+		// Init diffuse irradiance map
 		{
 			AllocatedImage newImage{};
 			newImage.imageFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
@@ -1052,11 +1086,28 @@ void MainEngine::init_pipelines()
 
 
 			CubeToDiffusePushConstantData pushData{};
-			pushData.sampleDelta = 0.025f;
+			pushData.sampleDelta = _sampleDelta;
 			vkCmdPushConstants(cmd, _diffuseIrradiancePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(CubeToDiffusePushConstantData), &pushData);
 
-			vkCmdDispatch(cmd, _cubemapResolution / 16, _cubemapResolution / 16, 6);
+			vkCmdDispatch(cmd, _cubemapResolution / 8, _cubemapResolution / 8, 6);
 			});
+
+
+		// Take resulting cubemap and make it sample-able
+		{
+			VkDescriptorImageInfo cubemapCombined{};
+			cubemapCombined.sampler = _defaultSamplerLinear;
+			cubemapCombined.imageView = _diffuseIrradianceImage.imageView;
+			cubemapCombined.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+			// needs to match the order of the bindings in the layout
+			std::vector<DescriptorImageData> combined_descriptor = {
+				{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &cubemapCombined, 1 }
+			};
+
+			_cubemapDescriptorBuffer.setup_data(_device, combined_descriptor);
+
+		}
 	}
 
 }
@@ -1081,7 +1132,7 @@ void MainEngine::update_scene_data()
 
 	CubemapSceneData* p_scene_data = (CubemapSceneData*)_environmentMapSceneDataBuffer.info.pMappedData;
 	memcpy(p_scene_data, &environmentMapSceneData, sizeof(CubemapSceneData));
-	
+
 
 	SceneData sceneData = {};
 	sceneData.view = glm::lookAt(glm::vec3(camera_position), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -1247,7 +1298,7 @@ void MainEngine::create_cubemap_from_equirectangular()
 
 	_cubemapResolution = _equiImage.imageExtent.width / 4;
 
-	// Cubemap image
+	// Reinit Cubemap image (in case resolution changed)
 	{
 		destroy_image(splitCubemapImage);
 
@@ -1281,22 +1332,22 @@ void MainEngine::create_cubemap_from_equirectangular()
 		splitCubemapImage = newImage;
 	}
 
+	// add cubemap image to descriptor buffer
+	{
+		VkDescriptorImageInfo storageCombined{};
+		storageCombined.sampler = nullptr;
+		storageCombined.imageView = splitCubemapImage.imageView;
+		storageCombined.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
+		// needs to match the order of the bindings in the layout
+		std::vector<DescriptorImageData> storage_image = {
+			{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &storageCombined, 1 }
+		};
 
-	VkDescriptorImageInfo storageCombined{};
-	storageCombined.sampler = nullptr;
-	storageCombined.imageView = splitCubemapImage.imageView;
-	storageCombined.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-	// needs to match the order of the bindings in the layout
-	std::vector<DescriptorImageData> storage_image = {
-		{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &storageCombined, 1 }
+		_cubemapStorageDescriptorBuffer.set_data(_device, storage_image, 0);
 	};
 
-
-	_cubemapStorageDescriptorBuffer.set_data(_device, storage_image, 0);
-
-
+	// command - equiImage -> cubemap
 	immediate_submit([&](VkCommandBuffer cmd) {
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _cubemapPipeline);
 
@@ -1326,22 +1377,114 @@ void MainEngine::create_cubemap_from_equirectangular()
 
 		vkCmdDispatch(cmd, _cubemapResolution / 16, _cubemapResolution / 16, 6);
 		});
+	auto end0 = std::chrono::system_clock::now();
+	auto elapsed0 = std::chrono::duration_cast<std::chrono::microseconds>(end0 - start);
+	fmt::print("Cubemap Created in {} seconds\n", elapsed0.count() / 1000000.0f);
 
-	VkDescriptorImageInfo cubemapSampler{};
-	cubemapSampler.sampler = _defaultSamplerLinear;
-	cubemapSampler.imageView = splitCubemapImage.imageView;
-	cubemapSampler.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	// make cubemap sample-able
+	{
+		VkDescriptorImageInfo cubemapSampler{};
+		cubemapSampler.sampler = _defaultSamplerLinear;
+		cubemapSampler.imageView = splitCubemapImage.imageView;
+		cubemapSampler.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		std::vector<DescriptorImageData> combined_descriptor = {
+			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &cubemapSampler, 1 }
+		};
+		_cubemapDescriptorBuffer.set_data(_device, combined_descriptor, 0);
+	}
 
-	std::vector<DescriptorImageData> combined_descriptor = {
-		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &cubemapSampler, 1 }
-	};
 
-	_cubemapDescriptorBuffer.set_data(_device, combined_descriptor, 0);
+	// Reinit Diffuse Irradiance Map (in case resolution changed)
+	{
+		destroy_image(_diffuseIrradianceImage);
+		AllocatedImage newImage{};
+		newImage.imageFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+		newImage.imageExtent = { _cubemapResolution, _cubemapResolution, 1 };
 
+		VkImageCreateInfo img_info = vkinit::cubemap_create_info(
+			VK_FORMAT_R32G32B32A32_SFLOAT
+			, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT
+			, { _cubemapResolution,_cubemapResolution, 1 });
+
+		// always allocate images on dedicated GPU memory
+		VmaAllocationCreateInfo allocinfo = {};
+		allocinfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+		allocinfo.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		VK_CHECK(vmaCreateImage(_allocator, &img_info, &allocinfo, &newImage.image, &newImage.allocation, nullptr));
+
+		VkImageViewCreateInfo view_info = vkinit::cubemapview_create_info(VK_FORMAT_R32G32B32A32_SFLOAT, newImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
+
+
+		VK_CHECK(vkCreateImageView(_device, &view_info, nullptr, &newImage.imageView));
+
+		_diffuseIrradianceImage = newImage;
+	}
+
+	// add diffuse irradiance cubemap image to descriptor buffer
+	{
+		VkDescriptorImageInfo diffuseCubemapStorage{};
+		diffuseCubemapStorage.sampler = nullptr;
+		diffuseCubemapStorage.imageView = _diffuseIrradianceImage.imageView;
+		diffuseCubemapStorage.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+		std::vector<DescriptorImageData> diffuse_cubemap_storage_descriptor = {
+			{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &diffuseCubemapStorage, 1 }
+		};
+		// index 1 in the descriptor buffer (will need to offset when binding)
+		_cubemapStorageDescriptorBuffer.set_data(_device, diffuse_cubemap_storage_descriptor, 1);
+	}
+
+	// command - cubemap -> diffuse irradiance
+	immediate_submit([&](VkCommandBuffer cmd) {
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _diffuseIrradiancePipeline);
+
+		vkutil::transition_image(cmd, splitCubemapImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		vkutil::transition_image(cmd, _diffuseIrradianceImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+
+		VkDescriptorBufferBindingInfoEXT descriptor_buffer_binding_info[2] = {
+			_cubemapDescriptorBuffer.get_descriptor_buffer_binding_info(),
+			_cubemapStorageDescriptorBuffer.get_descriptor_buffer_binding_info(),
+		};
+
+		vkCmdBindDescriptorBuffersEXT(cmd, 2, descriptor_buffer_binding_info);
+		uint32_t cubemap_index = 0;
+		uint32_t diffuse_irradiance_index = 1;
+
+		VkDeviceSize offset = 0;
+		VkDeviceSize irradiancemap_offset = _cubemapStorageDescriptorBuffer.descriptor_buffer_size * 1;
+
+		vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _diffuseIrradiancePipelineLayout
+			, 0, 1, &cubemap_index, &offset);
+		vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _diffuseIrradiancePipelineLayout
+			, 1, 1, &diffuse_irradiance_index, &irradiancemap_offset);
+
+
+		CubeToDiffusePushConstantData pushData{};
+		pushData.sampleDelta = _sampleDelta;
+		vkCmdPushConstants(cmd, _diffuseIrradiancePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(CubeToDiffusePushConstantData), &pushData);
+
+		vkCmdDispatch(cmd, _cubemapResolution / 8, _cubemapResolution / 8, 6);
+		});
+
+	// Take resulting cubemap and make it sample-able
+	{
+		VkDescriptorImageInfo cubemapCombined{};
+		cubemapCombined.sampler = _defaultSamplerLinear;
+		cubemapCombined.imageView = _diffuseIrradianceImage.imageView;
+		cubemapCombined.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+		// needs to match the order of the bindings in the layout
+		std::vector<DescriptorImageData> combined_descriptor = {
+			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &cubemapCombined, 1 }
+		};
+
+		_cubemapDescriptorBuffer.set_data(_device, combined_descriptor, 1);
+
+	}
 
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-	fmt::print("Cubemap Created in {} seconds\n", elapsed.count() / 1000000.0f);
+	fmt::print("Diffuse Irradiance Map Created in {} seconds\n", elapsed.count() / 1000000.0f);
 }
 
 void MainEngine::save_cubemap(const char* path)

@@ -121,6 +121,10 @@ public:
 	std::string _cubemapSavePath;
 	bool _flipY{ false };
 	bool _customOutputPath{ false };
+	float _sampleDelta{ 0.025f };
+
+	int currentRenderView{ 1 };
+	int environmentMapType{ 1 };
 	
 	std::string _cubemapImagePath{};
 	AllocatedImage _equiImage; // equi image
@@ -197,8 +201,8 @@ private:
 	void layout_imgui();
 	void draw_imgui(VkCommandBuffer cmd, VkImageView targetImageView);
 
-	void draw_fullscreen(VkCommandBuffer cmd, AllocatedImage targetImage);
-	void draw_environment(VkCommandBuffer cmd, AllocatedImage tagetImage, AllocatedImage depthImage);
+	void draw_fullscreen(VkCommandBuffer cmd);
+	void draw_environment(VkCommandBuffer cmd);
 
 	void init_pipelines();
 
