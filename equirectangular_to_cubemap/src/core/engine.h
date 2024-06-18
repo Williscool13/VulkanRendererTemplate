@@ -11,7 +11,8 @@
 #include "vk_loader.h"
 
 constexpr unsigned int FRAME_OVERLAP = 2;
-
+constexpr int specularPrefilteredMipLevels = 10;
+constexpr VkExtent3D specularPrefilteredBaseExtents = { 512, 512, 1 }; 
 
 struct LoadedGLTFMultiDraw;
 struct GLTFMetallic_RoughnessMultiDraw;
@@ -44,6 +45,13 @@ struct FrameData {
 	DeletionQueue _deletionQueue;
 };
 
+struct EnvironmentDrawPushConstantData {
+	float levelOfDetail;
+	float pad;
+	float pad2;
+	float pad3;
+};
+
 struct EquiToCubePushConstantData {
 	bool flipY;
 	float pad;
@@ -56,6 +64,13 @@ struct CubeToDiffusePushConstantData {
 	float pad;
 	float pad2;
 	float pad3;
+};
+
+struct CubeToPrefilteredConstantData {
+	float roughness;
+	uint32_t imageWidth;
+	uint32_t imageHeight;
+	uint32_t sampleCount;
 };
 
 
@@ -121,23 +136,27 @@ public:
 	std::string _cubemapSavePath;
 	bool _flipY{ false };
 	bool _customOutputPath{ false };
-	float _sampleDelta{ 0.025f };
+	float _diffuseSampleDelta{ 0.025f };
+	float _specularSampleCount{ 1024.0f };
 
 	int currentRenderView{ 1 };
-	int environmentMapType{ 1 };
+	int environmentMapType{ 0 };
+	float levelOfDetail{ 0.0f };
 	
 	std::string _cubemapImagePath{};
 	AllocatedImage _equiImage; // equi image
 	AllocatedImage splitCubemapImage; // cubemap image
 	AllocatedImage _diffuseIrradianceImage; // irradiance image
-	//AllocatedImage _prefilteredSpecularImage; // prefiltered image
+	AllocatedCubemap _prefilteredSpecularCubemapMips; // prefiltered image
 	uint32_t _cubemapResolution{ 1024 };
 
 #pragma region Images
 	AllocatedImage create_image(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	AllocatedImage create_image(void* data, size_t dataSize, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+	AllocatedImage create_cubemap(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	int get_channel_count(VkFormat format);
 	void destroy_image(const AllocatedImage& img);
+	void destroy_cubemapMips(const AllocatedCubemap& img);
 #pragma endregion
 
 #pragma region VkBuffers
@@ -161,6 +180,11 @@ public:
 	// cubemap to diffuse irradiance and prefiltered specular pipeline
 	VkPipelineLayout _diffuseIrradiancePipelineLayout;
 	VkPipeline _diffuseIrradiancePipeline;
+
+	// cubemap to prefiltered specular pipeline
+	VkPipelineLayout _prefilteredSpecularPipelineLayout;
+	VkPipeline _prefilteredSpecularPipeline;
+
 
 	VkPipelineLayout _environmentPipelineLayout;
 	ShaderObject _environmentPipeline;
@@ -214,9 +238,13 @@ private:
 	void destroy_swapchain();
 	void destroy_draw_iamges();
 
-	bool load_equirectangular_image(const char* path);
-	void create_cubemap_from_equirectangular();
+	bool load_equirectangular(const char* path);
+	void load_cubemap();
 	void save_cubemap(const char* path);
 	void save_diffuse_irradiance(const char* path);
+
+	void draw_equi_to_cubemap_immediate();
+	void draw_cubemap_to_diffuse_immediate();
+	void draw_cubemap_to_prefiltered_specular_immediate(int mipLevels);
 };
 
