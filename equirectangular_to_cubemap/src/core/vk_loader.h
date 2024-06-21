@@ -29,5 +29,4 @@ private:
     void clearAll();
 };
 
-std::optional<std::vector<float*>> loadCubemapFaces(MainEngine* engine, std::string_view filePath);
 std::optional<std::shared_ptr<LoadedGLTFMultiDraw>> loadGltfMultiDraw(MainEngine* engine, std::string_view filePath);

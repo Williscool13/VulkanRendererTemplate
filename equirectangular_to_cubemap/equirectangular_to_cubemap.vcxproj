@@ -149,11 +149,13 @@
     <ClCompile Include="include\volk\volk.c" />
     <ClCompile Include="src\core\engine.cpp" />
     <ClCompile Include="src\core\main.cpp" />
+    <ClCompile Include="src\core\vk_constructors.cpp" />
     <ClCompile Include="src\core\vk_descriptors.cpp" />
     <ClCompile Include="src\core\vk_descriptor_buffer.cpp" />
     <ClCompile Include="src\core\vk_draw_structure.cpp" />
     <ClCompile Include="src\core\vk_images.cpp" />
     <ClCompile Include="src\core\vk_initializers.cpp" />
+    <ClCompile Include="src\core\vk_environment_map.cpp" />
     <ClCompile Include="src\core\vk_loader.cpp" />
     <ClCompile Include="src\core\vk_pipelines.cpp" />
     <ClCompile Include="src\core\vk_types.cpp" />

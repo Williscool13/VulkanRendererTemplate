@@ -41,6 +41,7 @@ protected:
 	static bool device_properties_retrieved;
 	bool is_buffer_mapped = false;
 	void* buffer_ptr;
+	int max_object_count;
 };
 
 // For any descriptor type that does not require a sampler
@@ -66,6 +67,7 @@ public:
 
 	int setup_data(VkDevice device, std::vector<DescriptorImageData> data);
 	void set_data(VkDevice device, std::vector<DescriptorImageData> data, int index);
+	void free_descriptor_buffer(int index);
 	VkDescriptorBufferBindingInfoEXT get_descriptor_buffer_binding_info();
 };
 

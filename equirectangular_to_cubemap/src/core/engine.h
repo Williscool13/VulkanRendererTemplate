@@ -9,6 +9,8 @@
 #include "vk_pipelines.h"
 #include "vk_draw_structure.h"
 #include "vk_loader.h"
+#include "vk_environment_map.h"
+#include "vk_constructors.h"
 
 constexpr unsigned int FRAME_OVERLAP = 2;
 constexpr int specularPrefilteredMipLevels = 10;
@@ -17,6 +19,8 @@ constexpr int diffuseIrradianceMipLevel = 5;
 
 struct LoadedGLTFMultiDraw;
 struct GLTFMetallic_RoughnessMultiDraw;
+class VulkanResourceConstructor;
+class EnvironmentMap;
 
 struct DeletionQueue
 {
@@ -31,7 +35,6 @@ struct DeletionQueue
 		for (auto it = deletors.rbegin(); it != deletors.rend(); it++) {
 			(*it)(); //call functors
 		}
-
 		deletors.clear();
 	}
 };
@@ -83,6 +86,10 @@ public:
 	VkDevice _device;
 	VkSurfaceKHR _surface;
 	VmaAllocator _allocator;
+
+	std::shared_ptr<VulkanResourceConstructor> _resourceConstructor;
+	std::shared_ptr<EnvironmentMap> _environmentMap;
+
 
 	VkExtent2D _windowExtent{ 1700 , 900 };
 	struct SDL_Window* _window{ nullptr };
@@ -145,30 +152,17 @@ public:
 	int cubemapType{ 0 };
 	float levelOfDetail{ 0.0f };
 	
-	std::string _cubemapImagePath{};
-	AllocatedImage _equiImage; // equi image
-	AllocatedImage splitCubemapImage; // cubemap image
-	AllocatedCubemap _specDiffCubemap; // diffuse irradiance is at mip 5
-	uint32_t _cubemapResolution{ 1024 };
+	//std::string _cubemapImagePath{};
+	//AllocatedImage _equiImage; // equi image
+	//AllocatedImage splitCubemapImage; // cubemap image
+	//AllocatedCubemap _specDiffCubemap; // diffuse irradiance is at mip 5
+	//uint32_t _cubemapResolution{ 1024 };
 
-#pragma region Images
-	AllocatedImage create_image(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
-	AllocatedImage create_image(void* data, size_t dataSize, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
-	AllocatedImage create_cubemap(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
-	int get_channel_count(VkFormat format);
-	void destroy_image(const AllocatedImage& img);
+
 	void destroy_cubemapMips(const AllocatedCubemap& img);
-#pragma endregion
-
-#pragma region VkBuffers
-	AllocatedBuffer create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
-	AllocatedBuffer create_staging_buffer(size_t allocSize);
-	void copy_buffer(AllocatedBuffer src, AllocatedBuffer dst, VkDeviceSize size);
-	VkDeviceAddress get_buffer_address(AllocatedBuffer buffer);
-	void destroy_buffer(const AllocatedBuffer& buffer);
 	void resize_swapchain();
 	std::string getParentFolder(const std::string& filePath);
-#pragma endregion
+
 
 
 	VkPipelineLayout _fullscreenPipelineLayout;
@@ -193,13 +187,10 @@ public:
 
 	// 0 is equi image
 	VkDescriptorSetLayout _equiImageDescriptorSetLayout;
-	DescriptorBufferSampler _equiImageDescriptorBuffer;
 	// [STORAGE] 0 is raw cubemap, 1 is irradiance, 2 is prefiltered
 	VkDescriptorSetLayout _cubemapStorageDescriptorSetLayout;
-	DescriptorBufferSampler _cubemapStorageDescriptorBuffer;
 	// [SAMPLED] 0 is raw cubemap, 1 is irradiance, 2 is prefiltered
 	VkDescriptorSetLayout _cubemapDescriptorSetLayout;
-	DescriptorBufferSampler _cubemapDescriptorBuffer;
 
 	AllocatedBuffer _environmentMapSceneDataBuffer;
 	DescriptorBufferUniform _environmentMapSceneDataDescriptorBuffer;
@@ -215,6 +206,9 @@ public:
 
 	void draw();
 
+
+	void draw_equi_to_cubemap_immediate(AllocatedImage& _cubemapImage, VkExtent3D extents, DescriptorBufferSampler& imageDescriptorBuffer, DescriptorBufferSampler& cubemapStorageDescriptorBuffer);
+	void draw_cubemap_to_diffuse_specular_immediate(AllocatedCubemap& _cubemapImage, DescriptorBufferSampler& _cubemapDescriptorBuffer, DescriptorBufferSampler& _cubemapStorageDescriptorBuffer);
 private:
 	void init_vulkan();
 	void init_swapchain();
@@ -240,12 +234,10 @@ private:
 	void destroy_swapchain();
 	void destroy_draw_iamges();
 
-	bool load_equirectangular(const char* path, bool init);
-	void load_cubemap(bool init);
-	void save_cubemap(const char* path);
-	void save_diffuse_irradiance(const char* path);
+	//bool load_equirectangular(const char* path, bool init);
+	//void load_cubemap(bool init);
+	//void save_cubemap(const char* path);
+	//void save_diffuse_irradiance(const char* path);
 
-	void draw_equi_to_cubemap_immediate();
-	void draw_cubemap_to_diffuse_specular_immediate();
 };
 

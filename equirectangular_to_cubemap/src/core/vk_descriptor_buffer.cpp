@@ -29,6 +29,7 @@ DescriptorBuffer::DescriptorBuffer(VkInstance instance, VkDevice device
 
 	free_indices = std::stack<int>();
 	for (int i = maxObjectCount - 1; i >= 0; i--) { free_indices.push(i); }
+	max_object_count = maxObjectCount;
 }
 
 
@@ -208,6 +209,12 @@ void DescriptorBufferSampler::set_data(VkDevice device, std::vector<DescriptorIm
 
 		accum_offset += descriptor_size;
 	}
+}
+
+void DescriptorBufferSampler::free_descriptor_buffer(int index)
+{
+	assert(index < max_object_count);
+	free_indices.push(index);
 }
 
 

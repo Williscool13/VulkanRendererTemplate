@@ -83,7 +83,7 @@ std::optional<AllocatedImage> load_image(MainEngine* engine, fastgltf::Asset& as
 							imagesize.height = 1;
 							imagesize.depth = 1;
 							unsigned char data[4] = { 255, 0, 255, 1 };
-							newImage = engine->create_image(data, 4, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, false);
+							newImage = engine->_resourceConstructor->create_image(data, 4, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, false);
 						}
 						else {
 							unsigned char* data = (unsigned char*)ktxTexture_GetData(kTexture);
@@ -91,7 +91,7 @@ std::optional<AllocatedImage> load_image(MainEngine* engine, fastgltf::Asset& as
 							imageExtents.width = kTexture->baseWidth;
 							imageExtents.height = kTexture->baseHeight;
 							imageExtents.depth = 1;
-							newImage = engine->create_image(data, kTexture->dataSize, imageExtents, ktxTexture_GetVkFormat(kTexture), VK_IMAGE_USAGE_SAMPLED_BIT, false);
+							newImage = engine->_resourceConstructor->create_image(data, kTexture->dataSize, imageExtents, ktxTexture_GetVkFormat(kTexture), VK_IMAGE_USAGE_SAMPLED_BIT, false);
 						}
 						
 					}
@@ -106,7 +106,7 @@ std::optional<AllocatedImage> load_image(MainEngine* engine, fastgltf::Asset& as
 						imagesize.height = height;
 						imagesize.depth = 1;
 						size_t size = width * height * 4;
-						newImage = engine->create_image(data, size, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, false);
+						newImage = engine->_resourceConstructor->create_image(data, size, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, false);
 
 						stbi_image_free(data);
 					}
@@ -123,7 +123,7 @@ std::optional<AllocatedImage> load_image(MainEngine* engine, fastgltf::Asset& as
 					imagesize.height = height;
 					imagesize.depth = 1;
 					size_t size = width * height * 4;
-					newImage = engine->create_image(data, size, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT,false);
+					newImage = engine->_resourceConstructor->create_image(data, size, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT,false);
 
 					stbi_image_free(data);
 				}
@@ -145,7 +145,7 @@ std::optional<AllocatedImage> load_image(MainEngine* engine, fastgltf::Asset& as
 								imagesize.height = height;
 								imagesize.depth = 1;
 								size_t size = width * height * 4;
-								newImage = engine->create_image(data, size, imagesize, VK_FORMAT_R8G8B8A8_UNORM,
+								newImage = engine->_resourceConstructor->create_image(data, size, imagesize, VK_FORMAT_R8G8B8A8_UNORM,
 									VK_IMAGE_USAGE_SAMPLED_BIT,false);
 								stbi_image_free(data);
 							}
@@ -165,27 +165,6 @@ std::optional<AllocatedImage> load_image(MainEngine* engine, fastgltf::Asset& as
 	}
 }
 
-std::optional<std::vector<float*>> loadCubemapFaces(MainEngine* engine, std::string_view filePath)
-{
-	/*if (faceFiles.size() != 6) {
-		throw std::runtime_error("Cubemap requires exactly 6 faces.");
-	}
-
-	int width, height, channels;
-	std::vector<float*> facesData;
-
-	for (const auto& file : faceFiles) {
-		float* data = stbi_loadf(file.c_str(), &width, &height, &channels, 4);
-		if (!data) {
-			throw std::runtime_error("Failed to load HDR image: " + file);
-		}
-		facesData.push_back(data);
-	}
-
-	return facesData;*/
-	return {};
-
-}
 
 std::optional<std::shared_ptr<LoadedGLTFMultiDraw>> loadGltfMultiDraw(MainEngine* engine, std::string_view filePath)
 {
@@ -504,7 +483,7 @@ void LoadedGLTFMultiDraw::clearAll()
 			continue;
 		}
 
-		creator->destroy_image(image);
+		creator->_resourceConstructor->destroy_image(image);
 	}
 
 	for (auto& sampler : samplers) {

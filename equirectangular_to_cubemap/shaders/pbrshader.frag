@@ -17,7 +17,7 @@ layout (location = 0) out vec4 outFragColor;
 layout(set = 2, binding = 0) uniform sampler samplers[32];
 layout(set = 2, binding = 1) uniform texture2D textures[255];
 
-
+layout(set = 3, binding = 0) uniform sampler2D environmentDiffuseAndSpecular;
 
 
 vec3 lambert(vec3 kD, vec3 albedo)

@@ -148,19 +148,19 @@ void GLTFMetallic_RoughnessMultiDraw::build_buffers(MainEngine* engine)
 	// Vertex Data (Per Sub-Mesh), Index Data (Per Instance), Instance Data (Per Instance), Material Data (Per Material)
 	{
 		number_of_instances = instanceData.size();
-		vertexBuffer = engine->create_buffer(allVertices.size() * sizeof(MultiDrawVertex)
+		vertexBuffer = engine->_resourceConstructor->create_buffer(allVertices.size() * sizeof(MultiDrawVertex)
 			, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
 			, VMA_MEMORY_USAGE_GPU_ONLY);
-		indexBuffer = engine->create_buffer(index_buffer_size
+		indexBuffer = engine->_resourceConstructor->create_buffer(index_buffer_size
 			, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT
 			, VMA_MEMORY_USAGE_GPU_ONLY);
-		materialBuffer = engine->create_buffer(scene.materials.size() * sizeof(MaterialData)
+		materialBuffer = engine->_resourceConstructor->create_buffer(scene.materials.size() * sizeof(MaterialData)
 			, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
 			, VMA_MEMORY_USAGE_GPU_ONLY);
 
-		AllocatedBuffer staging_vertex = engine->create_staging_buffer(allVertices.size() * sizeof(MultiDrawVertex));
-		AllocatedBuffer staging_index = engine->create_staging_buffer(index_buffer_size);
-		AllocatedBuffer staging_material = engine->create_staging_buffer(scene.materials.size() * sizeof(MaterialData));
+		AllocatedBuffer staging_vertex = engine->_resourceConstructor->create_staging_buffer(allVertices.size() * sizeof(MultiDrawVertex));
+		AllocatedBuffer staging_index = engine->_resourceConstructor->create_staging_buffer(index_buffer_size);
+		AllocatedBuffer staging_material = engine->_resourceConstructor->create_staging_buffer(scene.materials.size() * sizeof(MaterialData));
 
 		memcpy(staging_vertex.info.pMappedData, allVertices.data(), allVertices.size() * sizeof(MultiDrawVertex));
 		for (size_t i = 0; i < number_of_instances; i++) {
@@ -171,20 +171,20 @@ void GLTFMetallic_RoughnessMultiDraw::build_buffers(MainEngine* engine)
 				, d.indices.size() * sizeof(uint32_t));
 		}
 		memcpy(staging_material.info.pMappedData, scene.materials.data(), scene.materials.size() * sizeof(MaterialData));
-		engine->copy_buffer(staging_vertex, vertexBuffer, allVertices.size() * sizeof(MultiDrawVertex));
-		engine->copy_buffer(staging_index, indexBuffer, index_buffer_size);
-		engine->copy_buffer(staging_material, materialBuffer, scene.materials.size() * sizeof(MaterialData));
+		engine->_resourceConstructor->copy_buffer(staging_vertex, vertexBuffer, allVertices.size() * sizeof(MultiDrawVertex));
+		engine->_resourceConstructor->copy_buffer(staging_index, indexBuffer, index_buffer_size);
+		engine->_resourceConstructor->copy_buffer(staging_material, materialBuffer, scene.materials.size() * sizeof(MaterialData));
 
 
-		instanceBuffer = engine->create_buffer(instanceData.size() * sizeof(InstanceData)
+		instanceBuffer = engine->_resourceConstructor->create_buffer(instanceData.size() * sizeof(InstanceData)
 			, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
 			, VMA_MEMORY_USAGE_CPU_TO_GPU);
 		memcpy(instanceBuffer.info.pMappedData, instanceData.data(), instanceData.size() * sizeof(InstanceData));
 
 
-		engine->destroy_buffer(staging_index);
-		engine->destroy_buffer(staging_vertex);
-		engine->destroy_buffer(staging_material);
+		engine->_resourceConstructor->destroy_buffer(staging_index);
+		engine->_resourceConstructor->destroy_buffer(staging_vertex);
+		engine->_resourceConstructor->destroy_buffer(staging_material);
 	}
 
 
@@ -213,15 +213,15 @@ void GLTFMetallic_RoughnessMultiDraw::build_buffers(MainEngine* engine)
 		}
 
 		if (opaque_command_count > 0) {
-			opaqueDrawBuffers.indirectDrawBuffer = engine->create_buffer(opaque_command_count * sizeof(VkDrawIndexedIndirectCommand)
+			opaqueDrawBuffers.indirectDrawBuffer = engine->_resourceConstructor->create_buffer(opaque_command_count * sizeof(VkDrawIndexedIndirectCommand)
 				, indirect_flags, VMA_MEMORY_USAGE_GPU_ONLY);
 			opaqueDrawBuffers.instanceCount = static_cast<uint32_t>(opaque_command_count);
 
-			AllocatedBuffer staging_indirect = engine->create_staging_buffer(opaque_command_count * sizeof(VkDrawIndexedIndirectCommand));
+			AllocatedBuffer staging_indirect = engine->_resourceConstructor->create_staging_buffer(opaque_command_count * sizeof(VkDrawIndexedIndirectCommand));
 			memcpy(staging_indirect.info.pMappedData, cpu_commands.data(), opaque_command_count * sizeof(VkDrawIndexedIndirectCommand));
-			engine->copy_buffer(staging_indirect, opaqueDrawBuffers.indirectDrawBuffer, opaque_command_count * sizeof(VkDrawIndexedIndirectCommand));
+			engine->_resourceConstructor->copy_buffer(staging_indirect, opaqueDrawBuffers.indirectDrawBuffer, opaque_command_count * sizeof(VkDrawIndexedIndirectCommand));
 
-			engine->destroy_buffer(staging_indirect);
+			engine->_resourceConstructor->destroy_buffer(staging_indirect);
 		}
 
 		// Transparent Draws
@@ -241,15 +241,15 @@ void GLTFMetallic_RoughnessMultiDraw::build_buffers(MainEngine* engine)
 			cpu_commands_transparent.push_back(cmd);
 		}
 		if (transparent_command_count > 0) {
-			transparentDrawBuffers.indirectDrawBuffer = engine->create_buffer(transparent_command_count * sizeof(VkDrawIndexedIndirectCommand)
+			transparentDrawBuffers.indirectDrawBuffer = engine->_resourceConstructor->create_buffer(transparent_command_count * sizeof(VkDrawIndexedIndirectCommand)
 				, indirect_flags, VMA_MEMORY_USAGE_GPU_ONLY);
 			transparentDrawBuffers.instanceCount = static_cast<uint32_t>(transparent_command_count);
 
-			AllocatedBuffer staging_indirect_transparent = engine->create_staging_buffer(transparent_command_count * sizeof(VkDrawIndexedIndirectCommand));
+			AllocatedBuffer staging_indirect_transparent = engine->_resourceConstructor->create_staging_buffer(transparent_command_count * sizeof(VkDrawIndexedIndirectCommand));
 			memcpy(staging_indirect_transparent.info.pMappedData, cpu_commands_transparent.data(), transparent_command_count * sizeof(VkDrawIndexedIndirectCommand));
-			engine->copy_buffer(staging_indirect_transparent, transparentDrawBuffers.indirectDrawBuffer, transparent_command_count * sizeof(VkDrawIndexedIndirectCommand));
+			engine->_resourceConstructor->copy_buffer(staging_indirect_transparent, transparentDrawBuffers.indirectDrawBuffer, transparent_command_count * sizeof(VkDrawIndexedIndirectCommand));
 
-			engine->destroy_buffer(staging_indirect_transparent);
+			engine->_resourceConstructor->destroy_buffer(staging_indirect_transparent);
 		}
 	}
 
@@ -257,10 +257,10 @@ void GLTFMetallic_RoughnessMultiDraw::build_buffers(MainEngine* engine)
 	{
 		//  ADDRESSES
 		VkDeviceAddress addresses[3];
-		addresses[0] = engine->get_buffer_address(vertexBuffer);
-		addresses[1] = engine->get_buffer_address(materialBuffer);
-		addresses[2] = engine->get_buffer_address(instanceBuffer);
-		buffer_addresses_underlying = engine->create_buffer(sizeof(addresses), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		addresses[0] = engine->_resourceConstructor->get_buffer_address(vertexBuffer);
+		addresses[1] = engine->_resourceConstructor->get_buffer_address(materialBuffer);
+		addresses[2] = engine->_resourceConstructor->get_buffer_address(instanceBuffer);
+		buffer_addresses_underlying = engine->_resourceConstructor->create_buffer(sizeof(addresses), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 		memcpy(buffer_addresses_underlying.info.pMappedData, addresses, sizeof(addresses));
 		buffer_addresses.setup_data(engine->_device, buffer_addresses_underlying, sizeof(addresses));
 
@@ -294,7 +294,7 @@ void GLTFMetallic_RoughnessMultiDraw::build_buffers(MainEngine* engine)
 		texture_data.setup_data(engine->_device, texture_descriptors);
 
 		// SCENE DATA
-		sceneDataBuffer = engine->create_buffer(sizeof(SceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		sceneDataBuffer = engine->_resourceConstructor->create_buffer(sizeof(SceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 		scene_data.setup_data(engine->_device, sceneDataBuffer, sizeof(SceneData));
 	}
 
