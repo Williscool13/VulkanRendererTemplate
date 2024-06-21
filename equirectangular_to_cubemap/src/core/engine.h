@@ -13,6 +13,7 @@
 constexpr unsigned int FRAME_OVERLAP = 2;
 constexpr int specularPrefilteredMipLevels = 10;
 constexpr VkExtent3D specularPrefilteredBaseExtents = { 512, 512, 1 }; 
+constexpr int diffuseIrradianceMipLevel = 5;
 
 struct LoadedGLTFMultiDraw;
 struct GLTFMetallic_RoughnessMultiDraw;
@@ -47,8 +48,8 @@ struct FrameData {
 
 struct EnvironmentDrawPushConstantData {
 	float levelOfDetail;
-	float pad;
-	float pad2;
+	float diffuseMipLevel;
+	VkBool32 isDiffuse;
 	float pad3;
 };
 
@@ -137,17 +138,17 @@ public:
 	bool _flipY{ false };
 	bool _customOutputPath{ false };
 	float _diffuseSampleDelta{ 0.025f };
-	float _specularSampleCount{ 1024.0f };
+	float _specularSampleCount{ 2048.0f };
 
 	int currentRenderView{ 1 };
 	int environmentMapType{ 0 };
+	int cubemapType{ 0 };
 	float levelOfDetail{ 0.0f };
 	
 	std::string _cubemapImagePath{};
 	AllocatedImage _equiImage; // equi image
 	AllocatedImage splitCubemapImage; // cubemap image
-	AllocatedImage _diffuseIrradianceImage; // irradiance image
-	AllocatedCubemap _prefilteredSpecularCubemapMips; // prefiltered image
+	AllocatedCubemap _specDiffCubemap; // diffuse irradiance is at mip 5
 	uint32_t _cubemapResolution{ 1024 };
 
 #pragma region Images
@@ -228,6 +229,7 @@ private:
 	void draw_fullscreen(VkCommandBuffer cmd);
 	void draw_environment(VkCommandBuffer cmd);
 
+	void init_descriptors();
 	void init_pipelines();
 
 	void update_scene_data();
@@ -238,13 +240,12 @@ private:
 	void destroy_swapchain();
 	void destroy_draw_iamges();
 
-	bool load_equirectangular(const char* path);
-	void load_cubemap();
+	bool load_equirectangular(const char* path, bool init);
+	void load_cubemap(bool init);
 	void save_cubemap(const char* path);
 	void save_diffuse_irradiance(const char* path);
 
 	void draw_equi_to_cubemap_immediate();
-	void draw_cubemap_to_diffuse_immediate();
-	void draw_cubemap_to_prefiltered_specular_immediate(int mipLevels);
+	void draw_cubemap_to_diffuse_specular_immediate();
 };
 

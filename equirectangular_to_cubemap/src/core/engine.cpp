@@ -47,9 +47,20 @@ void MainEngine::init() {
 	init_default_data();
 
 	init_dearimgui();
-
+	init_descriptors();
 	init_pipelines();
+	
+	// Default Cubemaps
+	_equirectangularPath = "src_images\\dam_bridge_4k.hdr";
+	_cubemapImagePath = "src_images\\dam_bridge_4k.hdr";
+	bool initialize = true;
+	load_equirectangular(_cubemapImagePath.data(), initialize);
+	load_cubemap(initialize);
 
+
+	auto end0 = std::chrono::system_clock::now();
+	auto elapsed0 = std::chrono::duration_cast<std::chrono::microseconds>(end0 - start);
+	fmt::print("Total Cubemap Load Time: {} seconds\n", elapsed0.count() / 1000000.0f);
 
 	_metallicSpheres = std::make_shared<GLTFMetallic_RoughnessMultiDraw>();
 	std::string structurePath = { "src_assets\\MetalRoughSpheres.glb" };
@@ -59,9 +70,9 @@ void MainEngine::init() {
 	_metallicSpheres->load_gltf(this, structurePath);
 	_metallicSpheres->build_buffers(this);
 
-	auto end = std::chrono::system_clock::now();
-	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-	fmt::print("Finished Initialization in {} seconds\n", elapsed.count() / 1000000.0f);
+	auto end1 = std::chrono::system_clock::now();
+	auto elapsed1 = std::chrono::duration_cast<std::chrono::microseconds>(end1 - start);
+	fmt::print("Finished Initialization in {} seconds\n", elapsed1.count() / 1000000.0f);
 	fmt::print("================================================================================\n");
 }
 
@@ -293,7 +304,15 @@ void MainEngine::draw_environment(VkCommandBuffer cmd) {
 		, 1, 1, &image_buffer_index, &image_buffer_offset);
 
 	EnvironmentDrawPushConstantData pushConstantData;
-	pushConstantData.levelOfDetail = levelOfDetail;
+	pushConstantData.diffuseMipLevel = diffuseIrradianceMipLevel;
+	if (cubemapType == 0) {
+		pushConstantData.levelOfDetail = -1;
+		pushConstantData.isDiffuse = VK_TRUE;
+	}
+	else {
+		pushConstantData.isDiffuse = VK_FALSE;
+		pushConstantData.levelOfDetail = levelOfDetail;
+	}
 
 	vkCmdPushConstants(cmd, _environmentPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(EnvironmentDrawPushConstantData), &pushConstantData);
 
@@ -522,12 +541,12 @@ void MainEngine::layout_imgui()
 
 
 		if (currentRenderView == 1) {
-			ImGui::SliderInt("Environment Map Type", &environmentMapType, 0, 2);
+			ImGui::SliderInt("Environment Map Type", &environmentMapType, 0, 1);
 		}
 
-
-		if (environmentMapType == 2) {
-			ImGui::SliderFloat("Level of Detail", &levelOfDetail, 0.0f, 9.0f);
+		ImGui::SliderInt("Cubemap Type", &cubemapType, 0, 1);
+		if (cubemapType == 1) {
+			ImGui::SliderFloat("Level of Detail", &levelOfDetail, 0.0f, 8.0f);
 		}
 
 
@@ -535,12 +554,13 @@ void MainEngine::layout_imgui()
 			ImGui::InputText("Path to Equirecangular Image", &_equirectangularPath);
 			ImGui::Checkbox("Flip Y", &_flipY);
 			ImGui::SliderFloat("Diffuse Irradiance Sample Delta", &_diffuseSampleDelta, 0.005f, 0.5f);
-			ImGui::SliderFloat("Specular Prefilter Sample Count" , &_specularSampleCount, 1.0f, 2048.0f);
+			ImGui::SliderFloat("Specular Prefilter Sample Count", &_specularSampleCount, 1.0f, 2048.0f);
 
 			if (ImGui::Button("Load Image")) {
-				if (load_equirectangular(_equirectangularPath.data())) {
+				bool initialize = false;
+				if (load_equirectangular(_equirectangularPath.data(), initialize)) {
 					_cubemapImagePath = _equirectangularPath;
-					load_cubemap();
+					load_cubemap(initialize);
 					fmt::print("Cubemap Created\n");
 
 				}
@@ -670,9 +690,8 @@ void MainEngine::init_default_data()
 #pragma endregion
 }
 
-void MainEngine::init_pipelines()
+void MainEngine::init_descriptors()
 {
-	// Descriptors
 	//  Equirectangular Image
 	{
 		DescriptorLayoutBuilder layoutBuilder;
@@ -740,6 +759,11 @@ void MainEngine::init_pipelines()
 		vkDestroyDescriptorSetLayout(_device, sceneDataDescriptorSetLayout, nullptr);
 		vkDestroyDescriptorSetLayout(_device, textureDescriptorSetLayout, nullptr);
 		});
+}
+
+void MainEngine::init_pipelines()
+{
+
 
 	_environmentMapSceneDataBuffer = create_buffer(sizeof(CubemapSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	_environmentMapSceneDataDescriptorBuffer = DescriptorBufferUniform(_instance, _device
@@ -980,126 +1004,8 @@ void MainEngine::init_pipelines()
 			});
 	}
 
+	
 
-	// Default Descriptor Data - should really be in init_descriptors
-	//  Equirectangular Image
-	{
-		int width, height, channels;
-		_cubemapImagePath = "src_images\\dam_bridge_4k.hdr";
-		float* data = stbi_loadf(_cubemapImagePath.data(), &width, &height, &channels, 4);
-		if (data) {
-			fmt::print("Loaded Initial Image \"{}\": {}x{}x{}\n", _cubemapImagePath, width, height, channels);
-			_equiImage = create_image(data, width * height * 4 * sizeof(float), VkExtent3D{ (uint32_t)width, (uint32_t)height, 1 }, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, true);
-			stbi_image_free(data);
-		}
-		else {
-			fmt::print("Failed to load Initial Image. Did you delete \\src_images\\dam_bridge_4k.hdr?\n");
-			abort();
-		}
-
-
-		VkDescriptorImageInfo equiImageDescriptorInfo{};
-		equiImageDescriptorInfo.sampler = _defaultSamplerNearest;
-		equiImageDescriptorInfo.imageView = _equiImage.imageView;
-		equiImageDescriptorInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-		// needs to match the order of the bindings in the layout
-		std::vector<DescriptorImageData> combined_descriptor = {
-			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &equiImageDescriptorInfo, 1 }
-		};
-
-		_equiImageDescriptorBuffer.setup_data(_device, combined_descriptor);
-	}
-
-	assert(_equiImage.imageExtent.width % 4 == 0);
-	_cubemapResolution = _equiImage.imageExtent.width / 4;
-	VkExtent3D extents = { _cubemapResolution, _cubemapResolution, 1 };
-
-	// Cubemap (Raw)
-	splitCubemapImage = create_cubemap(extents, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-
-	VkDescriptorImageInfo cubemapDescriptor{};
-	cubemapDescriptor.sampler = _defaultSamplerLinear; // sampler not actually used in storage image
-	cubemapDescriptor.imageView = splitCubemapImage.imageView;
-	cubemapDescriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-	std::vector<DescriptorImageData> cubemap_storage_descriptor = { { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &cubemapDescriptor, 1 } };
-	_cubemapStorageDescriptorBuffer.setup_data(_device, cubemap_storage_descriptor); // index 0
-
-	cubemapDescriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	std::vector<DescriptorImageData> combined_descriptor = { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &cubemapDescriptor, 1 } };
-	_cubemapDescriptorBuffer.setup_data(_device, combined_descriptor); // index 0
-
-	draw_equi_to_cubemap_immediate();
-
-
-	// Diffuse Irradiance Image
-	_diffuseIrradianceImage = create_cubemap(extents, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-
-	VkDescriptorImageInfo diffuseCubemapStorage{};
-	diffuseCubemapStorage.sampler = _defaultSamplerLinear; // sampler not actually used in storage image
-	diffuseCubemapStorage.imageView = _diffuseIrradianceImage.imageView;
-	diffuseCubemapStorage.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-	std::vector<DescriptorImageData> diffuse_cubemap_storage_descriptor = { { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &diffuseCubemapStorage, 1 } };
-	_cubemapStorageDescriptorBuffer.setup_data(_device, diffuse_cubemap_storage_descriptor); // index 1
-
-	diffuseCubemapStorage.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	std::vector<DescriptorImageData> diffuse_combined_descriptor = { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &diffuseCubemapStorage, 1 } };
-	_cubemapDescriptorBuffer.setup_data(_device, diffuse_combined_descriptor); // index 1
-
-	draw_cubemap_to_diffuse_immediate();
-
-
-	// Specular Irradiance Image (Prefiltered)
-	AllocatedImage _prefilteredSpecularImage = create_cubemap(specularPrefilteredBaseExtents, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, true);
-
-	VkDescriptorImageInfo prefilteredCubemapStorage{};
-	prefilteredCubemapStorage.sampler = _defaultSamplerLinear; // sampler not actually used in storage image
-	prefilteredCubemapStorage.imageView = _prefilteredSpecularImage.imageView;
-	prefilteredCubemapStorage.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-	std::vector<DescriptorImageData> prefiltered_cubemap_storage_descriptor = { { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &prefilteredCubemapStorage, 1 } };
-	// index 2 in the descriptor buffer (will need to offset when binding)
-	_cubemapStorageDescriptorBuffer.setup_data(_device, prefiltered_cubemap_storage_descriptor); // index 2
-
-	prefilteredCubemapStorage.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	std::vector<DescriptorImageData> prefiltered_combined_descriptor = {
-		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &prefilteredCubemapStorage, 1 }
-	};
-	_cubemapDescriptorBuffer.setup_data(_device, prefiltered_combined_descriptor); // index 2
-
-
-	_prefilteredSpecularCubemapMips = {};
-	_prefilteredSpecularCubemapMips.allocatedImage = _prefilteredSpecularImage;
-	_prefilteredSpecularCubemapMips.mipLevels = specularPrefilteredMipLevels;
-	_prefilteredSpecularCubemapMips.cubemapImageViews = std::vector<CubemapImageView>(specularPrefilteredMipLevels);
-	for (int i = 0; i < specularPrefilteredMipLevels; i++) {
-		CubemapImageView image_view{};
-
-		VkImageViewCreateInfo view_info = vkinit::cubemapview_create_info(_prefilteredSpecularImage.imageFormat, _prefilteredSpecularImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
-		view_info.subresourceRange.baseMipLevel = i;
-		VK_CHECK(vkCreateImageView(_device, &view_info, nullptr, &image_view.imageView));
-
-		uint32_t length = static_cast<uint32_t>(specularPrefilteredBaseExtents.width / pow(2, i)); // w and h always equal
-		image_view.imageExtent = { length, length, 1 };
-		image_view.roughness = static_cast<float>(i) / static_cast<float>(specularPrefilteredMipLevels - 1);
-		image_view.descriptorBufferIndex = 3 + i; // offset by 3 for the other three descriptors
-
-		_prefilteredSpecularCubemapMips.cubemapImageViews[i] = image_view;
-
-		VkDescriptorImageInfo prefilteredCubemapStorage{};
-		prefilteredCubemapStorage.sampler = _defaultSamplerLinear; // sampler not actually used in storage image
-		prefilteredCubemapStorage.imageView = image_view.imageView;
-		prefilteredCubemapStorage.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-		std::vector<DescriptorImageData> prefiltered_cubemap_storage_descriptor = {
-			{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &prefilteredCubemapStorage, 1 }
-		};
-		// index 2 in the descriptor buffer (will need to offset when binding)
-		_cubemapStorageDescriptorBuffer.setup_data(_device, prefiltered_cubemap_storage_descriptor); // indices 3 to 13
-	}
-
-
-	draw_cubemap_to_prefiltered_specular_immediate(specularPrefilteredMipLevels);
 }
 
 void MainEngine::update_scene_data()
@@ -1253,99 +1159,176 @@ void MainEngine::destroy_draw_iamges() {
 	}
 }
 
-bool MainEngine::load_equirectangular(const char* path)
+bool MainEngine::load_equirectangular(const char* path, bool init)
 {
 	int width, height, channels;
-	float* data = stbi_loadf(_equirectangularPath.c_str(), &width, &height, &channels, 4);
+	float* data = stbi_loadf(path, &width, &height, &channels, 4);
 	if (data) {
 		fmt::print("Loaded Equirectangular Image \"{}\": {}x{}x{}\n", _equirectangularPath, width, height, channels);
 		if (_equiImage.image != _errorCheckerboardImage.image) destroy_image(_equiImage);
 		_equiImage = create_image(data, width * height * 4 * sizeof(float), VkExtent3D{ (uint32_t)width, (uint32_t)height, 1 }, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 		stbi_image_free(data);
-
-		VkDescriptorImageInfo equiImageDescriptorInfo{};
-		equiImageDescriptorInfo.sampler = _defaultSamplerNearest;
-		equiImageDescriptorInfo.imageView = _equiImage.imageView;
-		equiImageDescriptorInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-		// needs to match the order of the bindings in the layout
-		std::vector<DescriptorImageData> combined_descriptor = {
-			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &equiImageDescriptorInfo, 1 }
-		};
-
-		_equiImageDescriptorBuffer.set_data(_device, combined_descriptor, 0);
-		return true;
 	}
 	else {
-		fmt::print("Failed to load Equirectangular Image\n");
+		if (init) {
+			fmt::print("Failed to load Initial Image. Did you delete \\src_images\\dam_bridge_4k.hdr?\n");
+			abort();
+		}
+		else {
+			fmt::print("Failed to load Equirectangular Image\n");
+		}
 		return false;
 	}
+
+	VkDescriptorImageInfo equiImageDescriptorInfo{};
+	equiImageDescriptorInfo.sampler = _defaultSamplerNearest;
+	equiImageDescriptorInfo.imageView = _equiImage.imageView;
+	equiImageDescriptorInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+	// needs to match the order of the bindings in the layout
+	std::vector<DescriptorImageData> combined_descriptor = {
+		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &equiImageDescriptorInfo, 1 }
+	};
+
+	if (init) { _equiImageDescriptorBuffer.setup_data(_device, combined_descriptor); }
+	else { _equiImageDescriptorBuffer.set_data(_device, combined_descriptor, 0); }
+	return true;
 }
 
-void MainEngine::load_cubemap()
+void MainEngine::load_cubemap(bool init)
 {
 	auto start = std::chrono::system_clock::now();
 
+	assert(_equiImage.imageExtent.width % 4 == 0);
 	_cubemapResolution = _equiImage.imageExtent.width / 4;
+	VkExtent3D extents = { _cubemapResolution, _cubemapResolution, 1 };
+	//_cubemapResolution = _equiImage.imageExtent.width / 4;
 
-	// Reinit Cubemap (in case resolution changed)
-	destroy_image(splitCubemapImage);
-	splitCubemapImage = create_cubemap({ _cubemapResolution, _cubemapResolution, 1 }, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-
-	// add new cubemap image to descriptor buffer
+	// Equi -> Cubemap
 	{
-		VkDescriptorImageInfo cubemapDescriptor{};
-		cubemapDescriptor.sampler = _defaultSamplerLinear;
-		cubemapDescriptor.imageView = splitCubemapImage.imageView;
-		cubemapDescriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-		std::vector<DescriptorImageData> storage_image = { { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &cubemapDescriptor, 1 } };
-		_cubemapStorageDescriptorBuffer.set_data(_device, storage_image, 0);
+		if (!init) destroy_image(splitCubemapImage);
+		splitCubemapImage = create_cubemap({ _cubemapResolution, _cubemapResolution, 1 }, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 
-		cubemapDescriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		std::vector<DescriptorImageData> combined_descriptor = { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &cubemapDescriptor, 1 } };
-		_cubemapDescriptorBuffer.set_data(_device, combined_descriptor, 0);
-	};
+		// add new cubemap image to descriptor buffer
+		{
+			VkDescriptorImageInfo cubemapDescriptor{};
+			cubemapDescriptor.sampler = _defaultSamplerLinear;
+			cubemapDescriptor.imageView = splitCubemapImage.imageView;
+			cubemapDescriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+			std::vector<DescriptorImageData> storage_image = { { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &cubemapDescriptor, 1 } };
+			if (init) { _cubemapStorageDescriptorBuffer.setup_data(_device, storage_image); }
+			else { _cubemapStorageDescriptorBuffer.set_data(_device, storage_image, 0); }
 
-	draw_equi_to_cubemap_immediate();
+			cubemapDescriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			std::vector<DescriptorImageData> combined_descriptor = { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &cubemapDescriptor, 1 } };
+			if (init) { _cubemapDescriptorBuffer.setup_data(_device, combined_descriptor); }
+			else { _cubemapDescriptorBuffer.set_data(_device, combined_descriptor, 0); }
+
+		};
+
+		draw_equi_to_cubemap_immediate();
+	}
+
 
 	auto end0 = std::chrono::system_clock::now();
 	auto elapsed0 = std::chrono::duration_cast<std::chrono::microseconds>(end0 - start);
 	fmt::print("Cubemap Created in {} seconds\n", elapsed0.count() / 1000000.0f);
 
-
-	// Reinit Diffuse Irradiance Map (in case resolution changed)
-	destroy_image(_diffuseIrradianceImage);
-	_diffuseIrradianceImage = create_cubemap({ _cubemapResolution, _cubemapResolution, 1 }, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-
-
-	// add diffuse irradiance cubemap image to descriptor buffer
 	{
-		VkDescriptorImageInfo diffuseCubemapDescriptor{};
-		diffuseCubemapDescriptor.sampler = _defaultSamplerLinear;
-		diffuseCubemapDescriptor.imageView = _diffuseIrradianceImage.imageView;
-		diffuseCubemapDescriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-		std::vector<DescriptorImageData> diffuse_cubemap_storage_descriptor = { { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &diffuseCubemapDescriptor, 1 } };
-		_cubemapStorageDescriptorBuffer.set_data(_device, diffuse_cubemap_storage_descriptor, 1);
+		if (init) {
+			AllocatedImage specDiffCubemap = create_cubemap(specularPrefilteredBaseExtents, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, true);
+
+			VkDescriptorImageInfo specDiffMapDescriptor{};
+			specDiffMapDescriptor.sampler = _defaultSamplerLinear; // sampler not actually used in storage image
+			specDiffMapDescriptor.imageView = specDiffCubemap.imageView;
+			specDiffMapDescriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+			std::vector<DescriptorImageData> spec_diff_storage_descriptor = { { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &specDiffMapDescriptor, 1 } };
+			_cubemapStorageDescriptorBuffer.setup_data(_device, spec_diff_storage_descriptor); // index 1
+
+			specDiffMapDescriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			std::vector<DescriptorImageData> spec_diff_combined_descriptor = { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &specDiffMapDescriptor, 1 } };
+			_cubemapDescriptorBuffer.setup_data(_device, spec_diff_combined_descriptor); // index 1
+
+			int diffuseIndex = specularPrefilteredMipLevels - 5;
+
+			_specDiffCubemap = {};
+			_specDiffCubemap.allocatedImage = specDiffCubemap;
+			_specDiffCubemap.mipLevels = specularPrefilteredMipLevels;
+			_specDiffCubemap.cubemapImageViews = std::vector<CubemapImageView>(specularPrefilteredMipLevels);
+			assert(specularPrefilteredBaseExtents.width == specularPrefilteredBaseExtents.height);
+
+			for (int i = 0; i < specularPrefilteredMipLevels; i++) {
+
+				CubemapImageView image_view{};
+				VkImageViewCreateInfo view_info = vkinit::cubemapview_create_info(specDiffCubemap.imageFormat, specDiffCubemap.image, VK_IMAGE_ASPECT_COLOR_BIT);
+				view_info.subresourceRange.baseMipLevel = i;
+				VK_CHECK(vkCreateImageView(_device, &view_info, nullptr, &image_view.imageView));
+
+				uint32_t length = static_cast<uint32_t>(specularPrefilteredBaseExtents.width / pow(2, i)); // w and h always equal
+				image_view.imageExtent = { length, length, 1 };
+				float roughness{};
+				int j = i;
+				if (i > 5) { j = i - 1; }
+				if (i == 5) { roughness = -1; } // diffuse irradiance map
+				else { roughness = static_cast<float>(j) / static_cast<float>(specularPrefilteredMipLevels - 2); }
+
+				image_view.roughness = roughness;
+				//image_view.descriptorBufferIndex = 3 + i; // offset by 3 for the other three descriptors
 
 
-		diffuseCubemapDescriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		std::vector<DescriptorImageData> combined_descriptor = { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &diffuseCubemapDescriptor, 1 } };
 
-		_cubemapDescriptorBuffer.set_data(_device, combined_descriptor, 1);
+
+				VkDescriptorImageInfo prefilteredCubemapStorage{};
+				prefilteredCubemapStorage.sampler = _defaultSamplerLinear; // sampler not actually used in storage image
+				prefilteredCubemapStorage.imageView = image_view.imageView;
+				prefilteredCubemapStorage.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+				std::vector<DescriptorImageData> prefiltered_cubemap_storage_descriptor = {
+					{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &prefilteredCubemapStorage, 1 }
+				};
+
+				int descriptorBufferIndex = _cubemapStorageDescriptorBuffer.setup_data(_device, prefiltered_cubemap_storage_descriptor);
+				image_view.descriptorBufferIndex = descriptorBufferIndex;
+
+				_specDiffCubemap.cubemapImageViews[i] = image_view;
+			}
+		}
+		draw_cubemap_to_diffuse_specular_immediate();
 	}
 
-	draw_cubemap_to_diffuse_immediate();
-
-	auto end1 = std::chrono::system_clock::now();
-	auto elapsed1 = std::chrono::duration_cast<std::chrono::microseconds>(end1 - end0);
-	fmt::print("Diffuse Irradiance Map Created in {} seconds\n", elapsed1.count() / 1000000.0f);
+	//// Reinit Diffuse Irradiance Map (in case resolution changed)
+	//destroy_image(_diffuseIrradianceImage);
+	//_diffuseIrradianceImage = create_cubemap({ _cubemapResolution, _cubemapResolution, 1 }, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 
 
-	draw_cubemap_to_prefiltered_specular_immediate(specularPrefilteredMipLevels);
+	//// add diffuse irradiance cubemap image to descriptor buffer
+	//{
+	//	VkDescriptorImageInfo diffuseCubemapDescriptor{};
+	//	diffuseCubemapDescriptor.sampler = _defaultSamplerLinear;
+	//	diffuseCubemapDescriptor.imageView = _diffuseIrradianceImage.imageView;
+	//	diffuseCubemapDescriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+	//	std::vector<DescriptorImageData> diffuse_cubemap_storage_descriptor = { { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &diffuseCubemapDescriptor, 1 } };
+	//	_cubemapStorageDescriptorBuffer.set_data(_device, diffuse_cubemap_storage_descriptor, 1);
 
-	auto end2 = std::chrono::system_clock::now();
+
+	//	diffuseCubemapDescriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	//	std::vector<DescriptorImageData> combined_descriptor = { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &diffuseCubemapDescriptor, 1 } };
+
+	//	_cubemapDescriptorBuffer.set_data(_device, combined_descriptor, 1);
+	//}
+
+	//draw_cubemap_to_diffuse_immediate();
+
+	//auto end1 = std::chrono::system_clock::now();
+	//auto elapsed1 = std::chrono::duration_cast<std::chrono::microseconds>(end1 - end0);
+	//fmt::print("Diffuse Irradiance Map Created in {} seconds\n", elapsed1.count() / 1000000.0f);
+
+
+	//draw_cubemap_to_prefiltered_specular_immediate(specularPrefilteredMipLevels);
+
+	/*auto end2 = std::chrono::system_clock::now();
 	auto elapsed2 = std::chrono::duration_cast<std::chrono::microseconds>(end2 - end1);
-	fmt::print("Specular Prefiltered Maps Created in {} seconds\n", elapsed2.count() / 1000000.0f);
+	fmt::print("Specular Prefiltered Maps Created in {} seconds\n", elapsed2.count() / 1000000.0f);*/
 
 	auto end3 = std::chrono::system_clock::now();
 	auto elapsed3 = std::chrono::duration_cast<std::chrono::microseconds>(end3 - start);
@@ -1408,7 +1391,7 @@ void MainEngine::save_diffuse_irradiance(const char* path) {
 	immediate_submit([&](VkCommandBuffer cmd) {
 		VkImageSubresourceLayers subresource = {};
 		subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		subresource.mipLevel = 0;
+		subresource.mipLevel = diffuseIrradianceMipLevel;
 		subresource.baseArrayLayer = 0;
 		subresource.layerCount = 1;
 
@@ -1420,7 +1403,7 @@ void MainEngine::save_diffuse_irradiance(const char* path) {
 
 			VkBufferImageCopy bufferCopyRegion{};
 			bufferCopyRegion.imageSubresource = subresource;
-			bufferCopyRegion.imageExtent = { _cubemapResolution, _cubemapResolution, 1 };
+			bufferCopyRegion.imageExtent = _specDiffCubemap.cubemapImageViews[diffuseIrradianceMipLevel].imageExtent;
 			bufferCopyRegion.bufferOffset = offset;
 			bufferCopyRegion.bufferRowLength = 0;
 			bufferCopyRegion.bufferImageHeight = 0;
@@ -1429,9 +1412,11 @@ void MainEngine::save_diffuse_irradiance(const char* path) {
 			offset += _cubemapResolution * _cubemapResolution * 4 * sizeof(float);
 		}
 
-		vkutil::transition_image(cmd, _diffuseIrradianceImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		vkutil::transition_image(cmd, _specDiffCubemap.allocatedImage.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 
-		vkCmdCopyImageToBuffer(cmd, _diffuseIrradianceImage.image, VK_IMAGE_LAYOUT_GENERAL, _stagingBuffer.buffer, bufferCopyRegions.size(), bufferCopyRegions.data());
+		vkCmdCopyImageToBuffer(cmd, _specDiffCubemap.allocatedImage.image, VK_IMAGE_LAYOUT_GENERAL, _stagingBuffer.buffer, bufferCopyRegions.size(), bufferCopyRegions.data());
+
+		vkutil::transition_image(cmd, _specDiffCubemap.allocatedImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 		});
 
@@ -1484,70 +1469,61 @@ void MainEngine::draw_equi_to_cubemap_immediate()
 		});
 }
 
-void MainEngine::draw_cubemap_to_diffuse_immediate()
+void MainEngine::draw_cubemap_to_diffuse_specular_immediate()
 {
 	immediate_submit([&](VkCommandBuffer cmd) {
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _diffuseIrradiancePipeline);
 
-		vkutil::transition_image(cmd, _diffuseIrradianceImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		auto start = std::chrono::system_clock::now();
+
+		vkutil::transition_image(cmd, _specDiffCubemap.allocatedImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+
 
 		VkDescriptorBufferBindingInfoEXT descriptor_buffer_binding_info[2] = {
 			_cubemapDescriptorBuffer.get_descriptor_buffer_binding_info(),
 			_cubemapStorageDescriptorBuffer.get_descriptor_buffer_binding_info(),
 		};
-
-		vkCmdBindDescriptorBuffersEXT(cmd, 2, descriptor_buffer_binding_info);
 		uint32_t cubemap_index = 0;
-		uint32_t diffuse_irradiance_index = 1;
+		uint32_t storage_cubemap_index = 1;
+		VkDeviceSize zero_offset = 0;
+		// Diffuse 
+		{
+			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _diffuseIrradiancePipeline);
+			vkCmdBindDescriptorBuffersEXT(cmd, 2, descriptor_buffer_binding_info);
+			vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _prefilteredSpecularPipelineLayout, 0, 1, &cubemap_index, &zero_offset);
 
-		VkDeviceSize offset = 0;
-		VkDeviceSize irradiancemap_offset = _cubemapStorageDescriptorBuffer.descriptor_buffer_size * 1;
+			CubemapImageView& diffuse = _specDiffCubemap.cubemapImageViews[5];
+			assert(diffuse.roughness == -1);
 
-		vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _diffuseIrradiancePipelineLayout
-			, 0, 1, &cubemap_index, &offset);
-		vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _diffuseIrradiancePipelineLayout
-			, 1, 1, &diffuse_irradiance_index, &irradiancemap_offset);
+			VkDeviceSize diffusemap_offset = _cubemapStorageDescriptorBuffer.descriptor_buffer_size * diffuse.descriptorBufferIndex;
+			vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _prefilteredSpecularPipelineLayout, 1, 1, &storage_cubemap_index, &diffusemap_offset);
+
+			CubeToDiffusePushConstantData pushData{};
+			pushData.sampleDelta = _diffuseSampleDelta;
+			vkCmdPushConstants(cmd, _diffuseIrradiancePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(CubeToDiffusePushConstantData), &pushData);
+
+			// width and height should be 32, dont need bounds check in shader code
+			uint32_t xDispatch = static_cast<uint32_t>(std::ceil(diffuse.imageExtent.width / 8.0f));
+			uint32_t yDispatch = static_cast<uint32_t>(std::ceil(diffuse.imageExtent.height / 8.0f));
+
+			vkCmdDispatch(cmd, xDispatch, yDispatch, 6);
+		}
 
 
-		CubeToDiffusePushConstantData pushData{};
-		pushData.sampleDelta = _diffuseSampleDelta;
-		vkCmdPushConstants(cmd, _diffuseIrradiancePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(CubeToDiffusePushConstantData), &pushData);
 
-		vkCmdDispatch(cmd, _cubemapResolution / 8, _cubemapResolution / 8, 6);
+		auto end0 = std::chrono::system_clock::now();
+		auto elapsed0 = std::chrono::duration_cast<std::chrono::microseconds>(end0 - start);
+		fmt::print("Diffuse Irradiance Map Created in {} seconds\n", elapsed0.count() / 1000000.0f);
 
-		vkutil::transition_image(cmd, _diffuseIrradianceImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-		});
-}
-
-void MainEngine::draw_cubemap_to_prefiltered_specular_immediate(int mipLevels)
-{
-	immediate_submit([&](VkCommandBuffer cmd) {
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _prefilteredSpecularPipeline);
-
-		vkutil::transition_image(cmd, _prefilteredSpecularCubemapMips.allocatedImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-
-
-
-		VkDescriptorBufferBindingInfoEXT descriptor_buffer_binding_info[2] = {
-			_cubemapDescriptorBuffer.get_descriptor_buffer_binding_info(),
-			_cubemapStorageDescriptorBuffer.get_descriptor_buffer_binding_info(),
-		};
-
 		vkCmdBindDescriptorBuffersEXT(cmd, 2, descriptor_buffer_binding_info);
-		uint32_t cubemap_index = 0;
-		uint32_t diffuse_irradiance_index = 1;
+		vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _prefilteredSpecularPipelineLayout, 0, 1, &cubemap_index, &zero_offset);
 
-		VkDeviceSize offset = 0;
-		VkDeviceSize irradiancemap_offset = 0;
+		for (int i = 0; i < specularPrefilteredMipLevels; i++) {
+			if (i == 5) continue; // skip the diffuse map mip level
+			CubemapImageView& current = _specDiffCubemap.cubemapImageViews[i];
 
-		vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _prefilteredSpecularPipelineLayout, 0, 1, &cubemap_index, &offset);
-
-		for (int i = 0; i < mipLevels; i++) {
-			CubemapImageView& current = _prefilteredSpecularCubemapMips.cubemapImageViews[i];
-			int j = 0;
 			VkDeviceSize irradiancemap_offset = _cubemapStorageDescriptorBuffer.descriptor_buffer_size * current.descriptorBufferIndex;
-			vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _prefilteredSpecularPipelineLayout, 1, 1, &diffuse_irradiance_index, &irradiancemap_offset);
+			vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _prefilteredSpecularPipelineLayout, 1, 1, &storage_cubemap_index, &irradiancemap_offset);
 
 			CubeToPrefilteredConstantData pushData{};
 			pushData.roughness = current.roughness;
@@ -1564,8 +1540,13 @@ void MainEngine::draw_cubemap_to_prefiltered_specular_immediate(int mipLevels)
 		}
 
 
-		vkutil::transition_image(cmd, _prefilteredSpecularCubemapMips.allocatedImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	});
+		vkutil::transition_image(cmd, _specDiffCubemap.allocatedImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+		auto end1 = std::chrono::system_clock::now();
+		auto elapsed1 = std::chrono::duration_cast<std::chrono::microseconds>(end1 - end0);
+		fmt::print("Diffuse Irradiance Map Created in {} seconds\n", elapsed1.count() / 1000000.0f);
+
+		});
 }
 
 
@@ -1586,9 +1567,7 @@ void MainEngine::cleanup() {
 	// Default Data
 	destroy_image(_equiImage);
 	destroy_image(splitCubemapImage);
-	destroy_image(_diffuseIrradianceImage);
-	//destroy_image(_prefilteredSpecularImage);
-	destroy_cubemapMips(_prefilteredSpecularCubemapMips);
+	destroy_cubemapMips(_specDiffCubemap);
 
 
 	// IMGUI
