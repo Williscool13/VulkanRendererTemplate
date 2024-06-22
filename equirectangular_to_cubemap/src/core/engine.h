@@ -56,12 +56,6 @@ struct EnvironmentDrawPushConstantData {
 	float pad3;
 };
 
-struct EquiToCubePushConstantData {
-	bool flipY;
-	float pad;
-	float pad2;
-	float pad3;
-};
 
 struct CubeToDiffusePushConstantData {
 	float sampleDelta;
@@ -142,22 +136,13 @@ public:
 	// Application Data
 	std::string _equirectangularPath;
 	std::string _cubemapSavePath;
-	bool _flipY{ false };
 	bool _customOutputPath{ false };
-	float _diffuseSampleDelta{ 0.025f };
-	float _specularSampleCount{ 2048.0f };
+	
 
 	int currentRenderView{ 1 };
 	int environmentMapType{ 0 };
 	int cubemapType{ 0 };
 	float levelOfDetail{ 0.0f };
-	
-	//std::string _cubemapImagePath{};
-	//AllocatedImage _equiImage; // equi image
-	//AllocatedImage splitCubemapImage; // cubemap image
-	//AllocatedCubemap _specDiffCubemap; // diffuse irradiance is at mip 5
-	//uint32_t _cubemapResolution{ 1024 };
-
 
 	void destroy_cubemapMips(const AllocatedCubemap& img);
 	void resize_swapchain();
@@ -168,29 +153,12 @@ public:
 	VkPipelineLayout _fullscreenPipelineLayout;
 	ShaderObject _fullscreenPipeline;
 
-	// equi to cubemap pipeline
-	VkPipelineLayout _cubemapPipelineLayout;
-	VkPipeline _cubemapPipeline;
-
-	// cubemap to diffuse irradiance and prefiltered specular pipeline
-	VkPipelineLayout _diffuseIrradiancePipelineLayout;
-	VkPipeline _diffuseIrradiancePipeline;
-
-	// cubemap to prefiltered specular pipeline
-	VkPipelineLayout _prefilteredSpecularPipelineLayout;
-	VkPipeline _prefilteredSpecularPipeline;
-
-
 	VkPipelineLayout _environmentPipelineLayout;
 	ShaderObject _environmentPipeline;
+
+
 	
 
-	// 0 is equi image
-	VkDescriptorSetLayout _equiImageDescriptorSetLayout;
-	// [STORAGE] 0 is raw cubemap, 1 is irradiance, 2 is prefiltered
-	VkDescriptorSetLayout _cubemapStorageDescriptorSetLayout;
-	// [SAMPLED] 0 is raw cubemap, 1 is irradiance, 2 is prefiltered
-	VkDescriptorSetLayout _cubemapDescriptorSetLayout;
 
 	AllocatedBuffer _environmentMapSceneDataBuffer;
 	DescriptorBufferUniform _environmentMapSceneDataDescriptorBuffer;
@@ -207,8 +175,6 @@ public:
 	void draw();
 
 
-	void draw_equi_to_cubemap_immediate(AllocatedImage& _cubemapImage, VkExtent3D extents, DescriptorBufferSampler& imageDescriptorBuffer, DescriptorBufferSampler& cubemapStorageDescriptorBuffer);
-	void draw_cubemap_to_diffuse_specular_immediate(AllocatedCubemap& _cubemapImage, DescriptorBufferSampler& _cubemapDescriptorBuffer, DescriptorBufferSampler& _cubemapStorageDescriptorBuffer);
 private:
 	void init_vulkan();
 	void init_swapchain();

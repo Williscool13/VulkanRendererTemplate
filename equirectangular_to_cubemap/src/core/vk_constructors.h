@@ -3,11 +3,8 @@
 #include "vk_types.h"
 #include "engine.h"
 
-
 #include "vk_images.h"
 #include "vk_initializers.h"
-
-
 
 class VulkanResourceConstructor {
 public:
@@ -19,19 +16,13 @@ public:
 	AllocatedBuffer create_staging_buffer(size_t allocSize);
 	void copy_buffer(AllocatedBuffer src, AllocatedBuffer dst, VkDeviceSize size);
 	VkDeviceAddress get_buffer_address(AllocatedBuffer buffer);
-
 	void destroy_buffer(const AllocatedBuffer& buffer);
 
 	// Vulkan Images
-
 	AllocatedImage create_image(void* data, size_t dataSize, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	AllocatedImage create_image(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
-
 	AllocatedImage create_cubemap(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
-
 	void destroy_image(const AllocatedImage& img);
-
-
 
 private:
 	MainEngine* _creator;

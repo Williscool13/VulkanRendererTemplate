@@ -170,6 +170,7 @@
     <ClInclude Include="src\core\vk_types.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="shaders\brdflut.comp" />
     <None Include="shaders\cubetodiffspec.comp" />
     <None Include="shaders\cubetospecprefilter.comp" />
     <None Include="shaders\environment.frag" />
