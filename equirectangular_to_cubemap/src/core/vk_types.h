@@ -90,6 +90,16 @@ struct BoundingSphere {
 };
 
 
+struct ComputeCullingData {
+	VkDeviceAddress opaqueCommandBufferAddress;
+	uint32_t opaqueCommandBufferCount;
+	VkDeviceAddress transparentCommandBufferAddress;
+	uint32_t transparentCommandBufferCount;
+	VkDeviceAddress meshBoundsAddress;
+	glm::vec3 padding;
+};
+
+
 struct CubemapSceneData {
 	glm::mat4 view;
 	glm::mat4 proj;

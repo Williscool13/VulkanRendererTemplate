@@ -21,7 +21,6 @@ VkPipeline EnvironmentMap::_cubemapToSpecularPipeline = VK_NULL_HANDLE;
 VkPipelineLayout EnvironmentMap::_lutPipelineLayout = VK_NULL_HANDLE;
 VkPipeline EnvironmentMap::_lutPipeline = VK_NULL_HANDLE;
 DescriptorBufferSampler EnvironmentMap::_lutDescriptorBuffer = DescriptorBufferSampler();
-DescriptorBufferSampler EnvironmentMap::_lutSamplerDescriptorBuffer = DescriptorBufferSampler();
 
 AllocatedImage EnvironmentMap::_lutImage = {};
 
@@ -272,15 +271,6 @@ EnvironmentMap::EnvironmentMap(MainEngine* creator)
 
 			_lutDescriptorBuffer.setup_data(_device, descriptor); // index 0, obviously
 			generate_lut_immediate();
-
-			_lutSamplerDescriptorBuffer = DescriptorBufferSampler(creator->_instance, creator->_device
-				, creator->_physicalDevice, creator->_allocator, _equiImageDescriptorSetLayout, 1);
-			lutDescriptorInfo.sampler = _sampler;
-			std::vector<DescriptorImageData> lut_sampler_descriptor = {
-				{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &lutDescriptorInfo, 1 }
-			};
-			_lutSamplerDescriptorBuffer.setup_data(_device, lut_sampler_descriptor);
-
 		}
 
 
@@ -627,7 +617,7 @@ void EnvironmentMap::save_lut_image(const char* path)
 	float* imageData = static_cast<float*>(data);
 
 	uint8_t* byteImageData = new uint8_t[lutImageExtent.width * lutImageExtent.height * 4];
-	float pow_eight = pow(2, 8) - 1;
+	float pow_eight = static_cast<float>(pow(2, 8) - 1);
 	for (size_t i = 0; i < lutImageExtent.width * lutImageExtent.height; ++i) {
 		float v1 = imageData[i * 2];
 		float v2 = imageData[i * 2 + 1];
@@ -792,3 +782,103 @@ void EnvironmentMap::generate_lut_immediate() {
 		vkutil::transition_image(cmd, _lutImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		});
 }
+
+
+//void MainEngine::save_cubemap(const char* path)
+//{
+//	size_t data_size = _cubemapResolution * _cubemapResolution * 4 * 6 * sizeof(float);
+//	AllocatedBuffer _stagingBuffer = _resourceConstructor->create_staging_buffer(data_size);
+//
+//	immediate_submit([&](VkCommandBuffer cmd) {
+//		VkImageSubresourceLayers subresource = {};
+//		subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+//		subresource.mipLevel = 0;
+//		subresource.baseArrayLayer = 0;
+//		subresource.layerCount = 1;
+//
+//		std::vector<VkBufferImageCopy> bufferCopyRegions;
+//		VkDeviceSize offset = 0;
+//
+//		for (uint32_t face = 0; face < 6; face++) {
+//			subresource.baseArrayLayer = face;
+//
+//			VkBufferImageCopy bufferCopyRegion{};
+//			bufferCopyRegion.imageSubresource = subresource;
+//			bufferCopyRegion.imageExtent = { _cubemapResolution, _cubemapResolution, 1 };
+//			bufferCopyRegion.bufferOffset = offset;
+//			bufferCopyRegion.bufferRowLength = 0;
+//			bufferCopyRegion.bufferImageHeight = 0;
+//
+//			bufferCopyRegions.push_back(bufferCopyRegion);
+//			offset += _cubemapResolution * _cubemapResolution * 4 * sizeof(float);
+//		}
+//
+//		vkutil::transition_image(cmd, splitCubemapImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+//
+//		vkCmdCopyImageToBuffer(cmd, splitCubemapImage.image, VK_IMAGE_LAYOUT_GENERAL, _stagingBuffer.buffer, bufferCopyRegions.size(), bufferCopyRegions.data());
+//
+//		});
+//
+//	void* data = _stagingBuffer.info.pMappedData;
+//	float* imageData = static_cast<float*>(data);
+//
+//	std::string directory = path;
+//
+//	for (uint32_t face = 0; face < 6; face++) {
+//		std::string facePath = directory + "\\" + "cubemap_face_" + std::to_string(face) + ".hdr";;
+//		stbi_write_hdr(facePath.c_str(), _cubemapResolution, _cubemapResolution, 4, imageData + (_cubemapResolution * _cubemapResolution * 4 * face));
+//		fmt::print("Saved face {} to: {}\n", face, facePath);
+//	}
+//
+//	_resourceConstructor->destroy_buffer(_stagingBuffer);
+//}
+//
+//void MainEngine::save_diffuse_irradiance(const char* path) {
+//	size_t data_size = _cubemapResolution * _cubemapResolution * 4 * 6 * sizeof(float);
+//	AllocatedBuffer _stagingBuffer = _resourceConstructor->create_staging_buffer(data_size);
+//
+//	immediate_submit([&](VkCommandBuffer cmd) {
+//		VkImageSubresourceLayers subresource = {};
+//		subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+//		subresource.mipLevel = diffuseIrradianceMipLevel;
+//		subresource.baseArrayLayer = 0;
+//		subresource.layerCount = 1;
+//
+//		std::vector<VkBufferImageCopy> bufferCopyRegions;
+//		VkDeviceSize offset = 0;
+//
+//		for (uint32_t face = 0; face < 6; face++) {
+//			subresource.baseArrayLayer = face;
+//
+//			VkBufferImageCopy bufferCopyRegion{};
+//			bufferCopyRegion.imageSubresource = subresource;
+//			bufferCopyRegion.imageExtent = _specDiffCubemap.cubemapImageViews[diffuseIrradianceMipLevel].imageExtent;
+//			bufferCopyRegion.bufferOffset = offset;
+//			bufferCopyRegion.bufferRowLength = 0;
+//			bufferCopyRegion.bufferImageHeight = 0;
+//
+//			bufferCopyRegions.push_back(bufferCopyRegion);
+//			offset += _cubemapResolution * _cubemapResolution * 4 * sizeof(float);
+//		}
+//
+//		vkutil::transition_image(cmd, _specDiffCubemap.allocatedImage.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+//
+//		vkCmdCopyImageToBuffer(cmd, _specDiffCubemap.allocatedImage.image, VK_IMAGE_LAYOUT_GENERAL, _stagingBuffer.buffer, bufferCopyRegions.size(), bufferCopyRegions.data());
+//
+//		vkutil::transition_image(cmd, _specDiffCubemap.allocatedImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+//
+//		});
+//
+//	void* data = _stagingBuffer.info.pMappedData;
+//	float* imageData = static_cast<float*>(data);
+//
+//	std::string directory = path;
+//
+//	for (uint32_t face = 0; face < 6; face++) {
+//		std::string facePath = directory + "\\" + "diffuse_irradiance_cubemap_face_" + std::to_string(face) + ".hdr";;
+//		stbi_write_hdr(facePath.c_str(), _cubemapResolution, _cubemapResolution, 4, imageData + (_cubemapResolution * _cubemapResolution * 4 * face));
+//		fmt::print("Saved face {} to: {}\n", face, facePath);
+//	}
+//
+//	_resourceConstructor->destroy_buffer(_stagingBuffer);
+//}

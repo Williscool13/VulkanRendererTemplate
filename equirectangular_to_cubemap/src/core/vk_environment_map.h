@@ -57,7 +57,6 @@ public:
 
 	DescriptorBufferSampler get_equi_image_descriptor_buffer() const { return _equiImageDescriptorBuffer; }
 	DescriptorBufferSampler get_cubemap_descriptor_buffer() const { return _cubemapDescriptorBuffer; }
-	DescriptorBufferSampler get_lut_descriptor_buffer() const { return _lutSamplerDescriptorBuffer; }
 
 	AllocatedImage get_cubemap_image() const { return _cubemapImage; }
 	AllocatedImage get_spec_diff_cubemap() const { return _specDiffCubemap; }
@@ -74,7 +73,6 @@ private:
 	DescriptorBufferSampler _cubemapDescriptorBuffer;
 
 	static DescriptorBufferSampler _lutDescriptorBuffer;
-	static DescriptorBufferSampler _lutSamplerDescriptorBuffer;
 
 
 	DescriptorBufferSampler _environmentMapDescriptorBuffer;

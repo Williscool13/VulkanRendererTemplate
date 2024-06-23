@@ -57,13 +57,11 @@ void MainEngine::init() {
 	init_pipelines();
 	
 
-	_metallicSpheres = std::make_shared<GLTFMetallic_RoughnessMultiDraw>();
 	std::string structurePath = { "src_assets\\MetalRoughSpheres.glb" };
+	_metallicSpheres = std::make_shared<GLTFMetallic_RoughnessMultiDraw>(this, structurePath, "shaders\\pbrshader.vert.spv", "shaders\\pbrshader.frag.spv", USE_MSAA, MSAA_SAMPLES);
 	//std::string structurePath = { "src_assets\\primitives.gltf" };
 	/*auto metalRoughSpheres = loadGltfMultiDraw(this, structurePath); */
-	_metallicSpheres->build_pipelines(this, USE_MSAA, MSAA_SAMPLES, "shaders\\pbrshader.vert.spv", "shaders\\pbrshader.frag.spv");
-	_metallicSpheres->load_gltf(this, structurePath);
-	_metallicSpheres->build_buffers(this);
+	
 
 	auto end1 = std::chrono::system_clock::now();
 	auto elapsed1 = std::chrono::duration_cast<std::chrono::microseconds>(end1 - start);
@@ -231,8 +229,7 @@ void MainEngine::draw_fullscreen(VkCommandBuffer cmd)
 	_fullscreenPipeline.bind_shaders(cmd);
 	_fullscreenPipeline.bind_rasterizaer_discard(cmd, VK_FALSE);
 
-	//VkDescriptorBufferBindingInfoEXT descriptor_buffer_binding_info = _environmentMap->get_equi_image_descriptor_buffer().get_descriptor_buffer_binding_info();
-	VkDescriptorBufferBindingInfoEXT descriptor_buffer_binding_info = _environmentMap->get_lut_descriptor_buffer().get_descriptor_buffer_binding_info();
+	VkDescriptorBufferBindingInfoEXT descriptor_buffer_binding_info = _environmentMap->get_equi_image_descriptor_buffer().get_descriptor_buffer_binding_info();
 	vkCmdBindDescriptorBuffersEXT(cmd, 1, &descriptor_buffer_binding_info);
 
 	constexpr uint32_t image_buffer_index = 0;
@@ -689,41 +686,28 @@ void MainEngine::init_default_data()
 
 void MainEngine::init_descriptors()
 {
-
 	{
 		DescriptorLayoutBuilder layoutBuilder;
 		layoutBuilder.add_binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-		bufferAddressesDescriptorSetLayout = layoutBuilder.build(_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT
-			, nullptr, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
-	}
-	{
-		DescriptorLayoutBuilder layoutBuilder;
-		layoutBuilder.add_binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-		sceneDataDescriptorSetLayout = layoutBuilder.build(_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT
+		singleUniformDescriptorSetLayout = layoutBuilder.build(_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT
 			, nullptr, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
 
 	}
-	{
-		DescriptorLayoutBuilder layoutBuilder;
-		layoutBuilder.add_binding(0, VK_DESCRIPTOR_TYPE_SAMPLER, 32); // I dont expect any models to have more than 32 samplers
-		layoutBuilder.add_binding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 255); // 255 is upper limit of textures in this engine
-
-		textureDescriptorSetLayout = layoutBuilder.build(_device, VK_SHADER_STAGE_FRAGMENT_BIT
-			, nullptr, VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT);
-	}
-
 
 	_environmentMapSceneDataBuffer = _resourceConstructor->create_buffer(sizeof(CubemapSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	_environmentMapSceneDataDescriptorBuffer = DescriptorBufferUniform(_instance, _device
-		, _physicalDevice, _allocator, sceneDataDescriptorSetLayout, 1);
+		, _physicalDevice, _allocator, singleUniformDescriptorSetLayout, 1);
 	_environmentMapSceneDataDescriptorBuffer.setup_data(_device, _environmentMapSceneDataBuffer, sizeof(CubemapSceneData));
 
+	_sceneDataBuffer = _resourceConstructor->create_buffer(sizeof(SceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	_sceneDataDescriptorBuffer = DescriptorBufferUniform(_instance, _device, _physicalDevice, _allocator, singleUniformDescriptorSetLayout, 1);
+	_sceneDataDescriptorBuffer.setup_data(_device, _sceneDataBuffer, sizeof(SceneData));
+
 	_mainDeletionQueue.push_function([=]() {
+		vkDestroyDescriptorSetLayout(_device, singleUniformDescriptorSetLayout, nullptr);
 
-		vkDestroyDescriptorSetLayout(_device, bufferAddressesDescriptorSetLayout, nullptr);
-		vkDestroyDescriptorSetLayout(_device, sceneDataDescriptorSetLayout, nullptr);
-		vkDestroyDescriptorSetLayout(_device, textureDescriptorSetLayout, nullptr);
-
+		_resourceConstructor->destroy_buffer(_sceneDataBuffer);
+		_sceneDataDescriptorBuffer.destroy(_device, _allocator);
 
 		_resourceConstructor->destroy_buffer(_environmentMapSceneDataBuffer);
 		_environmentMapSceneDataDescriptorBuffer.destroy(_device, _allocator);
@@ -740,7 +724,7 @@ void MainEngine::init_pipelines()
 	//  Environment Map Background
 	{
 		VkDescriptorSetLayout layouts[2] =
-		{ sceneDataDescriptorSetLayout, EnvironmentMap::_cubemapDescriptorSetLayout };
+		{ singleUniformDescriptorSetLayout, EnvironmentMap::_cubemapDescriptorSetLayout };
 
 		VkPushConstantRange pushConstantRange = {};
 		pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -849,8 +833,8 @@ void MainEngine::update_scene_data()
 	environmentMapSceneData.proj = projection;
 	environmentMapSceneData.viewproj = environmentMapSceneData.proj * environmentMapSceneData.view;
 
-	CubemapSceneData* p_scene_data = (CubemapSceneData*)_environmentMapSceneDataBuffer.info.pMappedData;
-	memcpy(p_scene_data, &environmentMapSceneData, sizeof(CubemapSceneData));
+	CubemapSceneData* p_cubemap_scene_data = (CubemapSceneData*)_environmentMapSceneDataBuffer.info.pMappedData;
+	memcpy(p_cubemap_scene_data, &environmentMapSceneData, sizeof(CubemapSceneData));
 
 
 	SceneData sceneData = {};
@@ -863,9 +847,13 @@ void MainEngine::update_scene_data()
 	sceneData.sunlightDirection = glm::vec4(0, 1, 0.5f, 1.f); // inverted to match openGL up/down
 	sceneData.cameraPosition = glm::vec4(camera_position);
 
+
+	SceneData *p_scene_data = (SceneData*)_sceneDataBuffer.info.pMappedData;
+	memcpy(p_scene_data, &sceneData, sizeof(SceneData));
+
+
 	glm::mat4 object_model = glm::mat4(1.0f);
-	_metallicSpheres->update_draw_data(sceneData, object_model);
-	// TODO: notice how this has to update scendata for each object, need to make this unifired buffer between all objects
+	_metallicSpheres->update_draw_data(object_model);
 
 }
 
@@ -982,105 +970,6 @@ void MainEngine::destroy_draw_iamges() {
 	}
 }
 
-//void MainEngine::save_cubemap(const char* path)
-//{
-//	size_t data_size = _cubemapResolution * _cubemapResolution * 4 * 6 * sizeof(float);
-//	AllocatedBuffer _stagingBuffer = _resourceConstructor->create_staging_buffer(data_size);
-//
-//	immediate_submit([&](VkCommandBuffer cmd) {
-//		VkImageSubresourceLayers subresource = {};
-//		subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-//		subresource.mipLevel = 0;
-//		subresource.baseArrayLayer = 0;
-//		subresource.layerCount = 1;
-//
-//		std::vector<VkBufferImageCopy> bufferCopyRegions;
-//		VkDeviceSize offset = 0;
-//
-//		for (uint32_t face = 0; face < 6; face++) {
-//			subresource.baseArrayLayer = face;
-//
-//			VkBufferImageCopy bufferCopyRegion{};
-//			bufferCopyRegion.imageSubresource = subresource;
-//			bufferCopyRegion.imageExtent = { _cubemapResolution, _cubemapResolution, 1 };
-//			bufferCopyRegion.bufferOffset = offset;
-//			bufferCopyRegion.bufferRowLength = 0;
-//			bufferCopyRegion.bufferImageHeight = 0;
-//
-//			bufferCopyRegions.push_back(bufferCopyRegion);
-//			offset += _cubemapResolution * _cubemapResolution * 4 * sizeof(float);
-//		}
-//
-//		vkutil::transition_image(cmd, splitCubemapImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-//
-//		vkCmdCopyImageToBuffer(cmd, splitCubemapImage.image, VK_IMAGE_LAYOUT_GENERAL, _stagingBuffer.buffer, bufferCopyRegions.size(), bufferCopyRegions.data());
-//
-//		});
-//
-//	void* data = _stagingBuffer.info.pMappedData;
-//	float* imageData = static_cast<float*>(data);
-//
-//	std::string directory = path;
-//
-//	for (uint32_t face = 0; face < 6; face++) {
-//		std::string facePath = directory + "\\" + "cubemap_face_" + std::to_string(face) + ".hdr";;
-//		stbi_write_hdr(facePath.c_str(), _cubemapResolution, _cubemapResolution, 4, imageData + (_cubemapResolution * _cubemapResolution * 4 * face));
-//		fmt::print("Saved face {} to: {}\n", face, facePath);
-//	}
-//
-//	_resourceConstructor->destroy_buffer(_stagingBuffer);
-//}
-//
-//void MainEngine::save_diffuse_irradiance(const char* path) {
-//	size_t data_size = _cubemapResolution * _cubemapResolution * 4 * 6 * sizeof(float);
-//	AllocatedBuffer _stagingBuffer = _resourceConstructor->create_staging_buffer(data_size);
-//
-//	immediate_submit([&](VkCommandBuffer cmd) {
-//		VkImageSubresourceLayers subresource = {};
-//		subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-//		subresource.mipLevel = diffuseIrradianceMipLevel;
-//		subresource.baseArrayLayer = 0;
-//		subresource.layerCount = 1;
-//
-//		std::vector<VkBufferImageCopy> bufferCopyRegions;
-//		VkDeviceSize offset = 0;
-//
-//		for (uint32_t face = 0; face < 6; face++) {
-//			subresource.baseArrayLayer = face;
-//
-//			VkBufferImageCopy bufferCopyRegion{};
-//			bufferCopyRegion.imageSubresource = subresource;
-//			bufferCopyRegion.imageExtent = _specDiffCubemap.cubemapImageViews[diffuseIrradianceMipLevel].imageExtent;
-//			bufferCopyRegion.bufferOffset = offset;
-//			bufferCopyRegion.bufferRowLength = 0;
-//			bufferCopyRegion.bufferImageHeight = 0;
-//
-//			bufferCopyRegions.push_back(bufferCopyRegion);
-//			offset += _cubemapResolution * _cubemapResolution * 4 * sizeof(float);
-//		}
-//
-//		vkutil::transition_image(cmd, _specDiffCubemap.allocatedImage.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-//
-//		vkCmdCopyImageToBuffer(cmd, _specDiffCubemap.allocatedImage.image, VK_IMAGE_LAYOUT_GENERAL, _stagingBuffer.buffer, bufferCopyRegions.size(), bufferCopyRegions.data());
-//
-//		vkutil::transition_image(cmd, _specDiffCubemap.allocatedImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-//
-//		});
-//
-//	void* data = _stagingBuffer.info.pMappedData;
-//	float* imageData = static_cast<float*>(data);
-//
-//	std::string directory = path;
-//
-//	for (uint32_t face = 0; face < 6; face++) {
-//		std::string facePath = directory + "\\" + "diffuse_irradiance_cubemap_face_" + std::to_string(face) + ".hdr";;
-//		stbi_write_hdr(facePath.c_str(), _cubemapResolution, _cubemapResolution, 4, imageData + (_cubemapResolution * _cubemapResolution * 4 * face));
-//		fmt::print("Saved face {} to: {}\n", face, facePath);
-//	}
-//
-//	_resourceConstructor->destroy_buffer(_stagingBuffer);
-//}
-
 void MainEngine::cleanup() {
 	fmt::print("================================================================================\n");
 	fmt::print("Cleaning up\n");
@@ -1098,7 +987,8 @@ void MainEngine::cleanup() {
 	vkDestroyDescriptorPool(_device, imguiPool, nullptr);
 
 	// Draw Structures
-	_metallicSpheres->destroy(_device, _allocator);
+	_metallicSpheres.reset();
+	//_metallicSpheres->destroy(_device, _allocator);
 
 
 	for (int i = 0; i < FRAME_OVERLAP; i++) {
@@ -1150,24 +1040,6 @@ void MainEngine::immediate_submit(std::function<void(VkCommandBuffer cmd)>&& fun
 
 	VK_CHECK(vkWaitForFences(_device, 1, &_immFence, true, 10000000000000000));
 }
-
-
-
-#pragma region TEXTURES
-
-void MainEngine::destroy_cubemapMips(const AllocatedCubemap& img)
-{
-	for (int i = 0; i < img.mipLevels; i++) {
-		vkDestroyImageView(_device, img.cubemapImageViews[i].imageView, nullptr);
-	}
-	vkDestroyImageView(_device, img.allocatedImage.imageView, nullptr);
-	vmaDestroyImage(_allocator, img.allocatedImage.image, img.allocatedImage.allocation);
-
-}
-
-#pragma endregion
-
-
 
 void MainEngine::resize_swapchain() {
 	vkDeviceWaitIdle(_device);

@@ -144,7 +144,6 @@ public:
 	int cubemapType{ 0 };
 	float levelOfDetail{ 0.0f };
 
-	void destroy_cubemapMips(const AllocatedCubemap& img);
 	void resize_swapchain();
 	std::string getParentFolder(const std::string& filePath);
 
@@ -156,16 +155,14 @@ public:
 	VkPipelineLayout _environmentPipelineLayout;
 	ShaderObject _environmentPipeline;
 
-
-	
-
-
+	AllocatedBuffer _sceneDataBuffer;
+	DescriptorBufferUniform _sceneDataDescriptorBuffer;
 	AllocatedBuffer _environmentMapSceneDataBuffer;
 	DescriptorBufferUniform _environmentMapSceneDataDescriptorBuffer;
 
-	VkDescriptorSetLayout bufferAddressesDescriptorSetLayout;
-	VkDescriptorSetLayout sceneDataDescriptorSetLayout;
-	VkDescriptorSetLayout textureDescriptorSetLayout;
+	//VkDescriptorSetLayout bufferAddressesDescriptorSetLayout;
+	//VkDescriptorSetLayout textureDescriptorSetLayout;
+	VkDescriptorSetLayout singleUniformDescriptorSetLayout;
 	std::shared_ptr<GLTFMetallic_RoughnessMultiDraw> _metallicSpheres;
 
 	void init();
@@ -174,6 +171,9 @@ public:
 
 	void draw();
 
+	// getters
+	VkDescriptorSetLayout get_scene_data_descriptor_set_layout() const { return singleUniformDescriptorSetLayout; }
+	DescriptorBufferUniform get_scene_data_descriptor_buffer() const { return _sceneDataDescriptorBuffer; }
 
 private:
 	void init_vulkan();
@@ -181,6 +181,8 @@ private:
 	void init_commands();
 	void init_sync_structures();
 	void init_default_data();
+	void init_descriptors();
+	void init_pipelines();
 
 	void init_dearimgui();
 	void layout_imgui();
@@ -189,8 +191,6 @@ private:
 	void draw_fullscreen(VkCommandBuffer cmd);
 	void draw_environment(VkCommandBuffer cmd);
 
-	void init_descriptors();
-	void init_pipelines();
 
 	void update_scene_data();
 
@@ -199,11 +199,5 @@ private:
 	void create_draw_images(uint32_t width, uint32_t height);
 	void destroy_swapchain();
 	void destroy_draw_iamges();
-
-	//bool load_equirectangular(const char* path, bool init);
-	//void load_cubemap(bool init);
-	//void save_cubemap(const char* path);
-	//void save_diffuse_irradiance(const char* path);
-
 };
 

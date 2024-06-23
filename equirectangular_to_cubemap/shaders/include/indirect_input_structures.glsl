@@ -51,7 +51,10 @@ layout(set = 0, binding = 0) uniform addresses
 	ModelData modelBufferDeviceAddress;
 } buffer_addresses;
 
-layout(set = 1, binding = 0) uniform GlobalUniform
+layout(set = 1, binding = 0) uniform sampler samplers[32];
+layout(set = 1, binding = 1) uniform texture2D textures[255];
+
+layout(set = 2, binding = 0) uniform GlobalUniform
 {
 	mat4 view;
 	mat4 proj;
