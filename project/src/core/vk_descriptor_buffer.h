@@ -1,6 +1,7 @@
 #pragma once
-#include "big_header.h"
 #include "vk_types.h"
+#include "big_header.h"
+
 struct DescriptorImageData {
 	VkDescriptorType type;
 	VkDescriptorImageInfo* image_info;
@@ -28,12 +29,12 @@ protected:
 	AllocatedBuffer descriptor_buffer;
 	VkDeviceAddress descriptor_buffer_gpu_address;
 	VkDescriptorSetLayout descriptor_set_layout;
-	
+
 	// total size of layout is at least sum of all bindings
 	//   but it can be larger due to potential metadata or pading from driver implementationVkDeviceSize descriptor_buffer_offset;
 
-	std::stack<int> free_indices;
-
+	std::vector<int> free_indices;
+	int max_object_count;
 
 	// static these things cause they are the same for all instances.
 	//  staticing reduces size from 400 to 112 bytes
@@ -51,7 +52,7 @@ public:
 		, VmaAllocator allocator, VkDescriptorSetLayout descriptorSetLayout, int maxObjectCount = 10);
 
 	int setup_data(VkDevice device, const AllocatedBuffer& uniform_buffer, size_t allocSize);
-	VkDescriptorBufferBindingInfoEXT get_descriptor_buffer_binding_info(VkDevice device);
+	VkDescriptorBufferBindingInfoEXT get_descriptor_buffer_binding_info();
 };
 
 
@@ -66,7 +67,9 @@ public:
 
 	int setup_data(VkDevice device, std::vector<DescriptorImageData> data);
 	void set_data(VkDevice device, std::vector<DescriptorImageData> data, int index);
-	VkDescriptorBufferBindingInfoEXT get_descriptor_buffer_binding_info(VkDevice device);
+	VkDescriptorBufferBindingInfoEXT get_descriptor_buffer_binding_info();
 };
+
+
 
 

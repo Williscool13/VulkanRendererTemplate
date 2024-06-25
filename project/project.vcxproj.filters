@@ -1,0 +1,131 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="src\fastgltf\base64.cpp">
+      <Filter>external\fastgltf</Filter>
+    </ClCompile>
+    <ClCompile Include="src\fastgltf\fastgltf.cpp">
+      <Filter>external\fastgltf</Filter>
+    </ClCompile>
+    <ClCompile Include="src\fastgltf\fastgltf.ixx">
+      <Filter>external\fastgltf</Filter>
+    </ClCompile>
+    <ClCompile Include="src\fastgltf\io.cpp">
+      <Filter>external\fastgltf</Filter>
+    </ClCompile>
+    <ClCompile Include="src\simdjson\simdjson.cpp">
+      <Filter>external\simdjson</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vkbootstrap\VkBootstrap.cpp">
+      <Filter>external\vkbootstrap</Filter>
+    </ClCompile>
+    <ClCompile Include="include\volk\volk.c">
+      <Filter>external\volk</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui.cpp">
+      <Filter>external\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui_demo.cpp">
+      <Filter>external\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui_draw.cpp">
+      <Filter>external\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\backends\imgui_impl_sdl2.cpp">
+      <Filter>external\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\backends\imgui_impl_vulkan.cpp">
+      <Filter>external\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\misc\cpp\imgui_stdlib.cpp">
+      <Filter>external\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui_tables.cpp">
+      <Filter>external\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="include\imgui\imgui_widgets.cpp">
+      <Filter>external\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\engine.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\main.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\vk_descriptor_buffer.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\vk_descriptors.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\vk_images.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\vk_initializers.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\vk_pipelines.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\core\big_header.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\engine.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\vk_descriptor_buffer.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\vk_descriptors.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\vk_images.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\vk_initializers.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\vk_pipelines.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\vk_types.h">
+      <Filter>src</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\fullscreen.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\fullscreen.vert">
+      <Filter>shaders</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="external">
+      <UniqueIdentifier>{fc425a82-6f33-4d20-b664-07e306326c32}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="external\fastgltf">
+      <UniqueIdentifier>{fe368554-44f8-4997-8048-f9ca1df10c94}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="external\simdjson">
+      <UniqueIdentifier>{091f39c8-7e37-41cc-8646-239580285c7d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="external\vkbootstrap">
+      <UniqueIdentifier>{dbf0badd-d1c6-4b01-8c43-0d1a72c96763}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="external\volk">
+      <UniqueIdentifier>{7d1a37b1-e889-4607-ab5b-f54d35b8f71f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="external\imgui">
+      <UniqueIdentifier>{23034b46-e7fe-4b4e-ad65-3b4506fbcf38}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="shaders">
+      <UniqueIdentifier>{89094af5-fd0e-48a2-aaee-1e82cdd8d10c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src">
+      <UniqueIdentifier>{40593e5b-b2f8-43ea-83f5-b1d0af5a161b}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

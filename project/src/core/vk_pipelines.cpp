@@ -1,4 +1,4 @@
-﻿#include <vk_pipelines.h	>
+﻿#include <vk_pipelines.h>
 
 
 
@@ -122,34 +122,42 @@ void vkutil::create_shader_objects(
 }
 
 
-void ShaderObject::init_input_assembly(VkPrimitiveTopology topology)
+ShaderObject& ShaderObject::init_input_assembly(VkPrimitiveTopology topology)
 {
 	_topology = topology;
+
+	return *this;
 }
 
-void ShaderObject::init_vertex_input(VkVertexInputBindingDescription2EXT vertex_description,
+ShaderObject& ShaderObject::init_vertex_input(VkVertexInputBindingDescription2EXT vertex_description,
 	std::vector<VkVertexInputAttributeDescription2EXT> attribute_descriptions)
 {
 	_vertex_description = vertex_description;
 	_attribute_descriptions = attribute_descriptions;
 
 	_vertexInputEnabled = true;
+
+	return *this;
 }
 
-void ShaderObject::init_rasterization(VkPolygonMode polygonMode, VkCullModeFlags cullMode, VkFrontFace frontFace)
+ShaderObject& ShaderObject::init_rasterization(VkPolygonMode polygonMode, VkCullModeFlags cullMode, VkFrontFace frontFace)
 {
 	_polygonMode = polygonMode;
 	_cullMode = cullMode;
 	_frontFace = frontFace;
+
+	return *this;
 }
 
-void ShaderObject::init_multisampling(VkBool32 sampleShadingEnable, VkSampleCountFlagBits rasterizationSamples
+ShaderObject& ShaderObject::init_multisampling(VkBool32 sampleShadingEnable, VkSampleCountFlagBits rasterizationSamples
 	, float minSampleShading, const VkSampleMask* pSampleMask, VkBool32 alphaToCoverageEnable, VkBool32 alphaToOneEnable)
 {
 	throw std::logic_error("The method or operation is not implemented.");
+
+	return *this;
 }
 
-void ShaderObject::init_depth(VkBool32 depthTestEnable, VkBool32 depthWriteEnable, VkCompareOp compareOp
+ShaderObject& ShaderObject::init_depth(VkBool32 depthTestEnable, VkBool32 depthWriteEnable, VkCompareOp compareOp
 	, VkBool32 depthBiasEnable, float depthBiasConstantFactor, float depthBiasClamp, float depthBiasSlopeFactor
 	, VkBool32 depthBoundsTestEnable, float minDepthBounds, float maxDepthBounds)
 {
@@ -165,9 +173,11 @@ void ShaderObject::init_depth(VkBool32 depthTestEnable, VkBool32 depthWriteEnabl
 	_depthBoundsTestEnable = depthBoundsTestEnable;
 	_minDepthBounds = minDepthBounds;
 	_maxDepthBounds = maxDepthBounds;
+
+	return *this;
 }
 
-void ShaderObject::init_blending(ShaderObject::BlendMode mode)
+ShaderObject& ShaderObject::init_blending(ShaderObject::BlendMode mode)
 {
 	switch (mode) {
 	case BlendMode::ALPHA_BLEND: {
@@ -202,50 +212,61 @@ void ShaderObject::init_blending(ShaderObject::BlendMode mode)
 			VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 		break;
 	}
+
+	return *this;
 }
 
-void ShaderObject::init_stencil(VkBool32 stencilTestEnable, VkStencilOpState front, VkStencilOpState back)
+ShaderObject& ShaderObject::init_stencil(VkBool32 stencilTestEnable, VkStencilOpState front, VkStencilOpState back)
 {
 	throw std::logic_error("The method or operation is not implemented.");
+
+	return *this;
 }
 
 
-void ShaderObject::disable_multisampling()
+ShaderObject& ShaderObject::disable_multisampling()
 {
 	_rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 	_pSampleMask = 0xFF;
 	_alphaToCoverageEnable = VK_FALSE;
 	_alphaToOneEnable = VK_FALSE;
+
+	return *this;
 }
 
-void ShaderObject::enable_msaa(VkSampleCountFlagBits samples)
+ShaderObject& ShaderObject::enable_msaa(VkSampleCountFlagBits samples)
 {
-
 	_rasterizationSamples = samples;
 	_pSampleMask = 0xFF;
 	_alphaToCoverageEnable = VK_FALSE;
 	_alphaToOneEnable = VK_FALSE;
+
+	return *this;
 }
 
-void ShaderObject::enable_depthtesting(bool depthWriteEnable, VkCompareOp op)
+ShaderObject& ShaderObject::enable_depthtesting(bool depthWriteEnable, VkCompareOp op)
 {
 	init_depth(
 		VK_TRUE, depthWriteEnable, op, // test/write
 		VK_FALSE, 0.0f, 0.0f, 0.0f, // bias
 		VK_FALSE, 0.0f, 1.0f // bounds
 	);
+
+	return *this;
 }
 
-void ShaderObject::disable_depthtesting()
+ShaderObject& ShaderObject::disable_depthtesting()
 {
 	init_depth(
 		VK_FALSE, VK_FALSE, VK_COMPARE_OP_ALWAYS, // test/write
 		VK_FALSE, 0.0f, 0.0f, 0.0f, // bias
 		VK_FALSE, 0.0f, 1.0f // bounds
 	);
+
+	return *this;
 }
 
-void ShaderObject::bind_viewport(VkCommandBuffer cmd, float width, float height, float minDepth, float maxDepth)
+ShaderObject& ShaderObject::bind_viewport(VkCommandBuffer cmd, float width, float height, float minDepth, float maxDepth)
 {
 	VkViewport viewport = {};
 	viewport.x = 0;
@@ -256,23 +277,29 @@ void ShaderObject::bind_viewport(VkCommandBuffer cmd, float width, float height,
 	viewport.maxDepth = maxDepth;
 	//vkCmdSetViewport(cmd, 0, 1, &viewport);
 	vkCmdSetViewportWithCount(cmd, 1, &viewport);
+
+	return *this;
 }
 
-void ShaderObject::bind_scissor(VkCommandBuffer cmd, int32_t offsetX, int32_t offsetY, uint32_t width, uint32_t height)
+ShaderObject& ShaderObject::bind_scissor(VkCommandBuffer cmd, int32_t offsetX, int32_t offsetY, uint32_t width, uint32_t height)
 {
 	VkRect2D scissor = {};
 	scissor.offset = { offsetX, offsetY };
 	scissor.extent = { width, height };
 	//vkCmdSetScissor(cmd, 0, 1, &scissor);
 	vkCmdSetScissorWithCount(cmd, 1, &scissor);
+
+	return *this;
 }
 
-void ShaderObject::bind_rasterizaer_discard(VkCommandBuffer cmd, VkBool32 rasterizerDiscardEnable)
+ShaderObject& ShaderObject::bind_rasterizaer_discard(VkCommandBuffer cmd, VkBool32 rasterizerDiscardEnable)
 {
 	vkCmdSetRasterizerDiscardEnable(cmd, rasterizerDiscardEnable);
+
+	return *this;
 }
 
-void ShaderObject::bind_input_assembly(VkCommandBuffer cmd)
+ShaderObject& ShaderObject::bind_input_assembly(VkCommandBuffer cmd)
 {
 
 	vkCmdSetPrimitiveTopologyEXT(cmd, _topology);
@@ -284,10 +311,11 @@ void ShaderObject::bind_input_assembly(VkCommandBuffer cmd)
 	else {
 		vkCmdSetVertexInputEXT(cmd, 0, nullptr, 0, nullptr);
 	}
-	
+
+	return *this;
 }
 
-void ShaderObject::bind_rasterization(VkCommandBuffer cmd)
+ShaderObject& ShaderObject::bind_rasterization(VkCommandBuffer cmd)
 {
 	// Draw Mode
 	vkCmdSetPolygonModeEXT(cmd, _polygonMode);
@@ -297,14 +325,16 @@ void ShaderObject::bind_rasterization(VkCommandBuffer cmd)
 	// Culling
 	vkCmdSetCullMode(cmd, _cullMode);
 	vkCmdSetFrontFace(cmd, _frontFace);
+
+	return *this;
 }
 
-void ShaderObject::bind_depth_test(VkCommandBuffer cmd) 
+ShaderObject& ShaderObject::bind_depth_test(VkCommandBuffer cmd)
 {
 	vkCmdSetDepthTestEnable(cmd, _depthTestEnable);
 	vkCmdSetDepthWriteEnable(cmd, _depthWriteEnable);
 	vkCmdSetDepthCompareOp(cmd, _compareOp);
-	
+
 	vkCmdSetDepthBoundsTestEnable(cmd, _depthBoundsTestEnable);
 	vkCmdSetDepthBounds(cmd, _minDepthBounds, _maxDepthBounds);
 
@@ -312,37 +342,46 @@ void ShaderObject::bind_depth_test(VkCommandBuffer cmd)
 	if (_depthBiasEnable) { vkCmdSetDepthBias(cmd, _depthBiasConstantFactor, _depthBiasClamp, _depthBiasSlopeFactor); }
 	// only if depthClamp feature is enabled
 	//vkCmdSetDepthClampEnableEXT();
+
+	return *this;
 }
 
-void ShaderObject::bind_stencil(VkCommandBuffer cmd) {
+ShaderObject& ShaderObject::bind_stencil(VkCommandBuffer cmd) {
 	vkCmdSetStencilTestEnable(cmd, VK_FALSE);
 	// below are the 4 functions to set stencil state
 	//vkCmdSetStencilOp(); 
 	//vkCmdSetStencilCompareMask();
 	//vkCmdSetStencilWriteMask();
 	//vkCmdSetStencilReference(); 
+
+	return *this;
 }
 
-void ShaderObject::bind_multisampling(VkCommandBuffer cmd)
+ShaderObject& ShaderObject::bind_multisampling(VkCommandBuffer cmd)
 {
 	//vkCmdSetSampleShadingEnableEXT(cmd, _sampleShadingEnable);
 	vkCmdSetRasterizationSamplesEXT(cmd, _rasterizationSamples);
 	vkCmdSetSampleMaskEXT(cmd, _rasterizationSamples, &_pSampleMask);
 	vkCmdSetAlphaToCoverageEnableEXT(cmd, _alphaToCoverageEnable);
 	vkCmdSetAlphaToOneEnableEXT(cmd, _alphaToOneEnable);
+
+	return *this;
 }
 
-void ShaderObject::bind_blending(VkCommandBuffer cmd)
+ShaderObject& ShaderObject::bind_blending(VkCommandBuffer cmd)
 {
 	vkCmdSetColorBlendEnableEXT(cmd, 0, 1, &_colorBlendingEnabled);
 	vkCmdSetColorWriteMaskEXT(cmd, 0, 1, &_colorWriteMask);
 	vkCmdSetColorBlendEquationEXT(cmd, 0, 1, &_colorBlendingEquation);
 
 	//vkCmdSetBlendConstants for blend equations that use constants
-	
+
+	return *this;
 }
 
-void ShaderObject::bind_shaders(VkCommandBuffer cmd)
+ShaderObject& ShaderObject::bind_shaders(VkCommandBuffer cmd)
 {
 	vkCmdBindShadersEXT(cmd, _shaderCount, _stages, _shaders);
+
+	return *this;
 }

@@ -4,6 +4,7 @@
 // defined here because needs implementation in translation unit
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image/stb_image.h>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image/stb_image_write.h>
 
 #define VMA_IMPLEMENTATION
@@ -42,13 +43,13 @@ void MainEngine::init() {
 	init_swapchain();
 	init_commands();
 	init_sync_structures();
-	
+
 	init_default_data();
 
 	init_dearimgui();
 
 	init_pipeline();
-	
+
 	auto end = std::chrono::system_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 	fmt::print("Finished Initialization in {} seconds\n", elapsed.count() / 1000000.0f);
@@ -128,12 +129,12 @@ void MainEngine::draw()
 
 	//vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 	//vkCmdClearColorImage(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &subresourceRange);
-	vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL); 
+	vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	draw_imgui(cmd, _swapchainImageViews[swapchainImageIndex]);
 	vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
 	VK_CHECK(vkEndCommandBuffer(cmd));
-	
+
 	auto end2 = std::chrono::system_clock::now();
 	auto elapsed2 = std::chrono::duration_cast<std::chrono::microseconds>(end2 - start2);
 
@@ -187,19 +188,19 @@ void MainEngine::draw_fullscreen(VkCommandBuffer cmd, AllocatedImage sourceImage
 	VkRenderingInfo renderInfo = vkinit::rendering_info(_drawExtent, &colorAttachment, nullptr);
 	vkCmdBeginRendering(cmd, &renderInfo);
 
-	_fullscreenPipeline.bind_viewport(cmd, static_cast<float>(_drawExtent.width), static_cast<float>(_drawExtent.height), 0.0f, 1.0f);
-	_fullscreenPipeline.bind_scissor(cmd, 0, 0, _drawExtent.width, _drawExtent.height);
-	_fullscreenPipeline.bind_input_assembly(cmd);
-	_fullscreenPipeline.bind_rasterization(cmd);
-	_fullscreenPipeline.bind_depth_test(cmd);
-	_fullscreenPipeline.bind_stencil(cmd);
-	_fullscreenPipeline.bind_multisampling(cmd);
-	_fullscreenPipeline.bind_blending(cmd);
-	_fullscreenPipeline.bind_shaders(cmd);
-	_fullscreenPipeline.bind_rasterizaer_discard(cmd, VK_FALSE);
+	_fullscreenPipeline.bind_viewport(cmd, static_cast<float>(_drawExtent.width), static_cast<float>(_drawExtent.height), 0.0f, 1.0f)
+		.bind_scissor(cmd, 0, 0, _drawExtent.width, _drawExtent.height)
+		.bind_input_assembly(cmd)
+		.bind_rasterization(cmd)
+		.bind_depth_test(cmd)
+		.bind_stencil(cmd)
+		.bind_multisampling(cmd)
+		.bind_blending(cmd)
+		.bind_shaders(cmd)
+		.bind_rasterizaer_discard(cmd, VK_FALSE);
 
 	VkDescriptorBufferBindingInfoEXT descriptor_buffer_binding_info =
-		_fullscreenDescriptorBuffer.get_descriptor_buffer_binding_info(_device);
+		_fullscreenDescriptorBuffer.get_descriptor_buffer_binding_info();
 	vkCmdBindDescriptorBuffersEXT(cmd, 1, &descriptor_buffer_binding_info);
 
 	constexpr uint32_t image_buffer_index = 0;
@@ -213,7 +214,7 @@ void MainEngine::draw_fullscreen(VkCommandBuffer cmd, AllocatedImage sourceImage
 
 void MainEngine::init_vulkan()
 {
-	
+
 	VkResult res = volkInitialize();
 	if (res != VK_SUCCESS) {
 		throw std::runtime_error("Failed to initialize volk");
@@ -283,7 +284,7 @@ void MainEngine::init_vulkan()
 	_device = vkbDevice.device;
 	_physicalDevice = targetDevice.physical_device;
 
-	
+
 	// Graphics Queue
 	_graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
 	_graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
@@ -513,11 +514,11 @@ void MainEngine::init_pipeline()
 
 	_fullscreenPipeline = {};
 
-	_fullscreenPipeline.init_input_assembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-	_fullscreenPipeline.init_rasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+	_fullscreenPipeline.init_input_assembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+		.init_rasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
 	if (USE_MSAA) _fullscreenPipeline.enable_msaa(MSAA_SAMPLES);
 	else _fullscreenPipeline.disable_multisampling();
-	
+
 	_fullscreenPipeline.init_blending(ShaderObject::BlendMode::NO_BLEND);
 	_fullscreenPipeline.disable_depthtesting();
 

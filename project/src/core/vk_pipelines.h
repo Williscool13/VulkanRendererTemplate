@@ -27,41 +27,41 @@ public:
     VkShaderEXT _shaders[3];
 
 
-    void init_input_assembly(VkPrimitiveTopology topology);
-    void init_vertex_input(VkVertexInputBindingDescription2EXT vertex_description, std::vector<VkVertexInputAttributeDescription2EXT> attribute_descriptions);
-    void init_rasterization(VkPolygonMode polygonMode, VkCullModeFlags cullMode, VkFrontFace frontFace);
-    void init_multisampling(VkBool32 sampleShadingEnable, VkSampleCountFlagBits rasterizationSamples
-							, float minSampleShading, const VkSampleMask* pSampleMask
-							, VkBool32 alphaToCoverageEnable, VkBool32 alphaToOneEnable);
+    ShaderObject& init_input_assembly(VkPrimitiveTopology topology);
+    ShaderObject& init_vertex_input(VkVertexInputBindingDescription2EXT vertex_description, std::vector<VkVertexInputAttributeDescription2EXT> attribute_descriptions);
+    ShaderObject& init_rasterization(VkPolygonMode polygonMode, VkCullModeFlags cullMode, VkFrontFace frontFace);
+    ShaderObject& init_multisampling(VkBool32 sampleShadingEnable, VkSampleCountFlagBits rasterizationSamples
+        , float minSampleShading, const VkSampleMask* pSampleMask
+        , VkBool32 alphaToCoverageEnable, VkBool32 alphaToOneEnable);
     // i cant find any set functions for this. maybe it is not needed
     //void setup_renderer(VkFormat colorattachmentFormat, VkFormat depthAttachmentFormat);
-    void init_depth(VkBool32 depthTestEnable, VkBool32 depthWriteEnable, VkCompareOp compareOp
-                            , VkBool32 depthBiasEnable, float depthBiasConstantFactor, float depthBiasClamp, float depthBiasSlopeFactor
-							, VkBool32 depthBoundsTestEnable, float minDepthBounds, float maxDepthBounds);
+    ShaderObject& init_depth(VkBool32 depthTestEnable, VkBool32 depthWriteEnable, VkCompareOp compareOp
+        , VkBool32 depthBiasEnable, float depthBiasConstantFactor, float depthBiasClamp, float depthBiasSlopeFactor
+        , VkBool32 depthBoundsTestEnable, float minDepthBounds, float maxDepthBounds);
 
-    void init_stencil(VkBool32 stencilTestEnable, VkStencilOpState front, VkStencilOpState back);
-    void init_blending(ShaderObject::BlendMode mode);
+    ShaderObject& init_stencil(VkBool32 stencilTestEnable, VkStencilOpState front, VkStencilOpState back);
+    ShaderObject& init_blending(ShaderObject::BlendMode mode);
 
     // shortcut setup functions
-    void disable_multisampling();
-    void enable_msaa(VkSampleCountFlagBits samples);
-    void enable_depthtesting(bool depthWriteEnable, VkCompareOp op);
-    void disable_depthtesting();
+    ShaderObject& disable_multisampling();
+    ShaderObject& enable_msaa(VkSampleCountFlagBits samples);
+    ShaderObject& enable_depthtesting(bool depthWriteEnable, VkCompareOp op);
+    ShaderObject& disable_depthtesting();
 
 
     // replaces dynamic states set up for original pipeline
-    void bind_viewport(VkCommandBuffer cmd, float width, float height, float minDepth, float maxDepth);
-    void bind_scissor(VkCommandBuffer cmd, int32_t offsetX, int32_t offsetY, uint32_t width, uint32_t height);
+    ShaderObject& bind_viewport(VkCommandBuffer cmd, float width, float height, float minDepth, float maxDepth);
+    ShaderObject& bind_scissor(VkCommandBuffer cmd, int32_t offsetX, int32_t offsetY, uint32_t width, uint32_t height);
     // should be disabled usually
     //  https://registry.khronos.org/vulkan/specs/1.3-extensions/html/vkspec.html#vkCmdSetRasterizerDiscardEnable
-    void bind_rasterizaer_discard(VkCommandBuffer cmd, VkBool32 rasterizerDiscardEnable);
-    void bind_input_assembly(VkCommandBuffer cmd);
-    void bind_rasterization(VkCommandBuffer cmd);
-    void bind_depth_test(VkCommandBuffer cmd);
-    void bind_stencil(VkCommandBuffer cmd);
-    void bind_multisampling(VkCommandBuffer cmd);
-    void bind_blending(VkCommandBuffer cmd);
-    void bind_shaders(VkCommandBuffer cmd);
+    ShaderObject& bind_rasterizaer_discard(VkCommandBuffer cmd, VkBool32 rasterizerDiscardEnable);
+    ShaderObject& bind_input_assembly(VkCommandBuffer cmd);
+    ShaderObject& bind_rasterization(VkCommandBuffer cmd);
+    ShaderObject& bind_depth_test(VkCommandBuffer cmd);
+    ShaderObject& bind_stencil(VkCommandBuffer cmd);
+    ShaderObject& bind_multisampling(VkCommandBuffer cmd);
+    ShaderObject& bind_blending(VkCommandBuffer cmd);
+    ShaderObject& bind_shaders(VkCommandBuffer cmd);
 
 private:
     // input assembly
