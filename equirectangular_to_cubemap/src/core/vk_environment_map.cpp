@@ -27,7 +27,7 @@ AllocatedImage EnvironmentMap::_lutImage = {};
 bool EnvironmentMap::layoutsCreated = false;
 
 
-EnvironmentMap::EnvironmentMap(MainEngine* creator)
+EnvironmentMap::EnvironmentMap(MainEngine* creator, const char* path)
 {
 	_creator = creator;
 	_device = creator->_device;
@@ -40,6 +40,10 @@ EnvironmentMap::EnvironmentMap(MainEngine* creator)
 	sampl.maxLod = VK_LOD_CLAMP_NONE;
 	sampl.magFilter = VK_FILTER_LINEAR;
 	sampl.minFilter = VK_FILTER_LINEAR;
+
+	sampl.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	sampl.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	sampl.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 
 	vkCreateSampler(_device, &sampl, nullptr, &_sampler);
 
@@ -289,7 +293,7 @@ EnvironmentMap::EnvironmentMap(MainEngine* creator)
 		, creator->_physicalDevice, creator->_allocator, _environmentMapDescriptorSetLayout, 1);
 
 
-	load_equirectangular_image(defaultEquiPath, true);
+	load_equirectangular_image(path, true);
 	load_cubemap(true);
 
 	VkDescriptorImageInfo diffSpecDescriptorInfo{};

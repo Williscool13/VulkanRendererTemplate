@@ -81,7 +81,8 @@ struct GLTFMetallic_RoughnessMultiDraw {
 	const uint32_t texture_data_descriptor_index = 1;
 	const uint32_t scene_data_descriptor_index = 2;
 	const uint32_t compute_culling_data_descriptor_index = 2;
-	const VkDeviceSize offsets = 0;
+	const uint32_t environment_map_descriptor_index = 3;
+	const VkDeviceSize zero_offset = 0;
 	void cull(VkCommandBuffer cmd, VkPipeline pipeline, VkPipelineLayout pipelineLayout);
 	void draw(VkCommandBuffer cmd, VkExtent2D drawExtents);
 };

@@ -83,6 +83,7 @@ public:
 
 	std::shared_ptr<VulkanResourceConstructor> _resourceConstructor;
 	std::shared_ptr<EnvironmentMap> _environmentMap;
+	std::vector<std::shared_ptr<EnvironmentMap>> _environmentMaps;
 
 
 	VkExtent2D _windowExtent{ 1700 , 900 };
@@ -174,6 +175,8 @@ public:
 	// getters
 	VkDescriptorSetLayout get_scene_data_descriptor_set_layout() const { return singleUniformDescriptorSetLayout; }
 	DescriptorBufferUniform get_scene_data_descriptor_buffer() const { return _sceneDataDescriptorBuffer; }
+
+	EnvironmentMap* get_environment_map() const { return _environmentMap.get(); }
 
 private:
 	void init_vulkan();

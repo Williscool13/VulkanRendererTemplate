@@ -3,6 +3,7 @@
 #extension GL_EXT_buffer_reference : require
 #extension GL_GOOGLE_include_directive : require
 #include "indirect_input_structures.glsl"
+#include "environment_map.glsl"
 
 // All calculations are done in world space
 layout (location = 0) in vec3 inPosition;
@@ -15,7 +16,6 @@ layout (location = 0) out vec4 outFragColor;
 
 
 
-//layout(set = 3, binding = 0) uniform sampler2D environmentDiffuseAndSpecular;
 
 
 vec3 lambert(vec3 kD, vec3 albedo)
@@ -68,10 +68,10 @@ vec3 F_SCHLICK(vec3 V, vec3 H, vec3 F0){
 	float VdotH = max(dot(V, H), 0.0f);
 
 	// classic
-	//return F0 + (1.0f - F0) * pow(1.0f - VdotH, 5.0f);
+	return F0 + (1.0f - F0) * pow(1.0f - VdotH, 5.0f);
 
 	// unreal optimized
-	return F0 + (1 - F0) * pow(2, unreal_fresnel_power(V, H));
+	//return F0 + (1 - F0) * pow(2, unreal_fresnel_power(V, H));
 }
 
 
@@ -94,14 +94,7 @@ void main()
 	vec3 albedo = inColor * _col.xyz;
 	float metallic = _metal_rough_sample.b * m.metal_rough_factors.x;
 	float roughness = _metal_rough_sample.g * m.metal_rough_factors.y;
-	//vec3 metal = texture(sampler2D(metalI, metalS), inUV).xyz;
 
-	vec3 ambient = albedo * sceneData.ambientColor.xyz;
-
-
-	//outFragColor = vec4(color * lightValue *  sceneData.sunlightColor.w + ambient , _col.w);
-	
-	outFragColor = vec4(vec3(m.metal_rough_factors.x), 1.0f);
 
 	vec3 light_color = sceneData.sunlightColor.xyz * sceneData.sunlightColor.w;
 	vec3 N = normalize(inNormal);
@@ -124,9 +117,27 @@ void main()
 	vec3 kD = vec3(1.0f) - kS;
 	kD *= 1.0f - metallic;
 
+	
+
 	// DIFFUSE
 	float nDotL = max(dot(N, L), 0.0f);
 	vec3 diffuse = lambert(kD, albedo);
+
+	// REFLECTIONS 
+	vec3 irradiance = DiffuseIrradiance(N);
+	vec3 reflection_diffuse = irradiance * albedo;
+
+	//vec3 prefiltered = SpecularPrefiltered(V, N, roughness).rgb;
+	vec3 testN = N;
+	testN.y = -testN.y;
+	vec3 R = reflect(-V, testN);
+	//R.y = -R.y;
+	vec3 prefilteredColor = textureLod(environmentDiffuseAndSpecular, R, roughness * MAX_REFLECTION_LOD).rgb; // dont need to skip mip 5 because never goes above 4
+	vec2 envBRDF = texture(lut, vec2(max(dot(N, V), 0.0f), roughness)).rg;
+	vec3 reflection_specular = prefilteredColor * (F * envBRDF.x + envBRDF.y);
+
+	vec3 ambient = (kD * reflection_diffuse + reflection_specular);
+
 
 	vec3 final_color = (diffuse + specular) * light_color * nDotL;
 	final_color += ambient;
@@ -137,8 +148,11 @@ void main()
 	corrected_final_color = pow(corrected_final_color, vec3(1.0f / 2.2f)); // gamma correction
 	outFragColor = vec4(corrected_final_color, _col.w);
 
+	//outFragColor = vec4(reflection_diffuse, 1.0f);
 
-
+	//outFragColor = vec4(corr_spec_pre, 1.0);
+	//outFragColor = vec4(texture(lut, inUV).rgb, 1.0);
+	//outFragColor = vec4(N, 1.0);
 
 	// cool debug to show distance from camera!
 	//outFragColor = vec4(vec3(distance(inPosition, sceneData.cameraPos.xyz) / 100.0f), 1.0f);

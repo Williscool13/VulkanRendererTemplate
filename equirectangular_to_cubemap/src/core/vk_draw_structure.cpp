@@ -39,16 +39,18 @@ GLTFMetallic_RoughnessMultiDraw::GLTFMetallic_RoughnessMultiDraw(
 		, engine->_physicalDevice, engine->_allocator, textureDescriptorSetLayout, 1);
 
 
+	assert(bufferAddressesDescriptorSetLayout != VK_NULL_HANDLE);
 	VkDescriptorSetLayout layouts[] = {
 		bufferAddressesDescriptorSetLayout,
 		textureDescriptorSetLayout,
 		engine->get_scene_data_descriptor_set_layout(),
+		EnvironmentMap::_environmentMapDescriptorSetLayout
 	};
 
 	// Pipeline Layout
 	{
 		VkPipelineLayoutCreateInfo mesh_layout_info = vkinit::pipeline_layout_create_info();
-		mesh_layout_info.setLayoutCount = 3;
+		mesh_layout_info.setLayoutCount = 4;
 		mesh_layout_info.pSetLayouts = layouts;
 		mesh_layout_info.pPushConstantRanges = nullptr;
 		mesh_layout_info.pushConstantRangeCount = 0;
@@ -85,7 +87,7 @@ GLTFMetallic_RoughnessMultiDraw::GLTFMetallic_RoughnessMultiDraw(
 		vkutil::create_shader_objects(
 			vertShaderPath, fragShaderPath
 			, engine->_device, shaderObject->_shaders
-			, 3, layouts
+			, 4, layouts
 			, 0, nullptr
 		);
 	}
@@ -424,9 +426,9 @@ void GLTFMetallic_RoughnessMultiDraw::cull(VkCommandBuffer cmd, VkPipeline pipel
 
 
 
-	vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &buffer_addresses_descriptor_index, &offsets);
-	vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 1, 1, &scene_data_descriptor_index, &offsets);
-	vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 2, 1, &compute_culling_data_descriptor_index, &offsets);
+	vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &buffer_addresses_descriptor_index, &zero_offset);
+	vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 1, 1, &scene_data_descriptor_index, &zero_offset);
+	vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 2, 1, &compute_culling_data_descriptor_index, &zero_offset);
 
 	vkCmdDispatch(cmd, static_cast<uint32_t>(
 		std::ceil(opaqueDrawBuffers.instanceCount + transparentDrawBuffers.instanceCount / 64.0f)), 1, 1);
@@ -446,15 +448,17 @@ void GLTFMetallic_RoughnessMultiDraw::draw(VkCommandBuffer cmd, VkExtent2D drawE
 		shaderObject->bind_shaders(cmd);
 		shaderObject->bind_rasterizaer_discard(cmd, VK_FALSE);
 
-		VkDescriptorBufferBindingInfoEXT descriptor_buffer_binding_info[3]{};
+		VkDescriptorBufferBindingInfoEXT descriptor_buffer_binding_info[4]{};
 		descriptor_buffer_binding_info[0] = buffer_addresses.get_descriptor_buffer_binding_info();
 		descriptor_buffer_binding_info[1] = texture_data.get_descriptor_buffer_binding_info();
 		descriptor_buffer_binding_info[2] = creator->get_scene_data_descriptor_buffer().get_descriptor_buffer_binding_info();
-		vkCmdBindDescriptorBuffersEXT(cmd, 3, descriptor_buffer_binding_info);
+		descriptor_buffer_binding_info[3] = creator->get_environment_map()->get_environment_map_descriptor_buffer().get_descriptor_buffer_binding_info();
+		vkCmdBindDescriptorBuffersEXT(cmd, 4, descriptor_buffer_binding_info);
 
-		vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, renderPipelineLayout, 0, 1, &buffer_addresses_descriptor_index, &offsets);
-		vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, renderPipelineLayout, 1, 1, &texture_data_descriptor_index, &offsets);
-		vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, renderPipelineLayout, 2, 1, &scene_data_descriptor_index, &offsets);
+		vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, renderPipelineLayout, 0, 1, &buffer_addresses_descriptor_index, &zero_offset);
+		vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, renderPipelineLayout, 1, 1, &texture_data_descriptor_index, &zero_offset);
+		vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, renderPipelineLayout, 2, 1, &scene_data_descriptor_index, &zero_offset);
+		vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, renderPipelineLayout, 3, 1, &environment_map_descriptor_index, &zero_offset);
 
 		vkCmdBindIndexBuffer(cmd, indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 	}

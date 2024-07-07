@@ -1,11 +1,16 @@
 #version 450
 
+
+#extension GL_EXT_buffer_reference : require
+#extension GL_GOOGLE_include_directive : require
+#include "environment_map.glsl"
+
+
 layout(location = 0) in vec3 fragPosition;
 layout(location = 0) out vec4 outColor;
 
 layout(set = 1, binding = 0) uniform samplerCube environmentMap;
 
-const uint MAX_MIP_LEVEL = 9;
 
 layout(push_constant) uniform PushConstants {
     float lod;

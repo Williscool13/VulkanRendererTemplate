@@ -27,7 +27,7 @@ public:
 	static const char* defaultEquiPath;
 
 
-	EnvironmentMap(MainEngine* creator);
+	EnvironmentMap(MainEngine* creator, const char* path);
 	~EnvironmentMap();
 
 	// init sampler
@@ -57,6 +57,8 @@ public:
 
 	DescriptorBufferSampler get_equi_image_descriptor_buffer() const { return _equiImageDescriptorBuffer; }
 	DescriptorBufferSampler get_cubemap_descriptor_buffer() const { return _cubemapDescriptorBuffer; }
+
+	DescriptorBufferSampler get_environment_map_descriptor_buffer() const { return _environmentMapDescriptorBuffer; }
 
 	AllocatedImage get_cubemap_image() const { return _cubemapImage; }
 	AllocatedImage get_spec_diff_cubemap() const { return _specDiffCubemap; }

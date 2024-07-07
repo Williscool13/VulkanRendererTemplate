@@ -152,6 +152,9 @@
     <None Include="shaders\brdflut.comp">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="shaders\include\environment_map.glsl">
+      <Filter>Shaders\Include</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\core\vk_types.h">

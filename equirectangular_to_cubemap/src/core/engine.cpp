@@ -52,7 +52,9 @@ void MainEngine::init() {
 	init_dearimgui();
 	init_descriptors();
 	
-	_environmentMap = std::make_shared<EnvironmentMap>(this);
+	_environmentMap = std::make_shared<EnvironmentMap>(this, EnvironmentMap::defaultEquiPath);
+	_environmentMaps.emplace_back(std::make_shared<EnvironmentMap>(this, "images\\meadow_4k.hdr"));
+
 
 	init_pipelines();
 	
@@ -723,6 +725,7 @@ void MainEngine::init_pipelines()
 	// Rendering Pipelines (Used in main draw loop)
 	//  Environment Map Background
 	{
+		assert(EnvironmentMap::layoutsCreated);
 		VkDescriptorSetLayout layouts[2] =
 		{ singleUniformDescriptorSetLayout, EnvironmentMap::_cubemapDescriptorSetLayout };
 
@@ -980,7 +983,9 @@ void MainEngine::cleanup() {
 	_mainDeletionQueue.flush();
 
 	_environmentMap.reset();
-
+	for (auto& m: _environmentMaps) {
+		m.reset();
+	}
 
 	// IMGUI
 	ImGui_ImplVulkan_Shutdown();
